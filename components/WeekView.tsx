@@ -2,8 +2,8 @@
 
 /**
  * A Kanban-style board for the week: one column per day, each split into
- * three meal-slot sections (breakfast/lunch/dinner), each holding a stack of
- * recipe cards. Columns scroll horizontally on narrow screens rather than
+ * two meal-slot sections (lunch/dinner), each holding a stack of recipe
+ * cards. Columns scroll horizontally on narrow screens rather than
  * reflowing, so every day stays a fixed, easy-to-scan width. Cards can be
  * dragged between (and reordered within) slots and days, and clicking one
  * opens that recipe in the same edit drawer as the Recipes tab. Days that
@@ -27,7 +27,6 @@ import {
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { X } from "lucide-react";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -37,7 +36,6 @@ import { addDays, isPastDate, mondayFromWeekId, startOfToday } from "@/lib/dates
 import { DAYS, MEAL_SLOTS, type Assignment, type Day, type MealSlot, type Recipe } from "@/lib/types";
 
 const MEAL_SLOT_LABELS: Record<MealSlot, string> = {
-  breakfast: "Breakfast",
   lunch: "Lunch",
   dinner: "Dinner",
 };
@@ -125,7 +123,7 @@ function MealCard({
   );
 }
 
-function MealSlotContent({
+function MealSlotSection({
   day,
   slot,
   isPast,
@@ -143,12 +141,16 @@ function MealSlotContent({
   return (
     <div
       ref={setNodeRef}
-      className={`flex flex-col gap-2 rounded-lg p-1 transition-colors ${
+      className={`flex flex-col gap-2 rounded-lg p-1.5 transition-colors ${
         isOver && !isPast ? "bg-primary/10 ring-1 ring-primary/30" : ""
       }`}
     >
+      <div className="px-0.5 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+        {MEAL_SLOT_LABELS[slot]}
+      </div>
+
       <SortableContext items={assignments.map((a) => a.id)} strategy={verticalListSortingStrategy}>
-        {/* min-h-52 keeps an open slot a consistent height — room for ~3 cards even when it has fewer. */}
+        {/* min-h-52 keeps a section a consistent height — room for ~3 cards even when it has fewer. */}
         <div className="flex min-h-52 flex-col gap-2">
           {assignments.map((assignment) => {
             const recipe = findRecipe(assignment.recipeId);
@@ -193,26 +195,15 @@ interface DayColumnProps {
   date: Date;
   isToday: boolean;
   isPast: boolean;
-  /** True while any card anywhere on the board is being dragged — forces every
-      section open so a drop target is never hidden behind a collapsed accordion. */
-  forceOpenAll: boolean;
   registerNode: (day: Day, node: HTMLDivElement | null) => void;
   onOpenRecipe: (recipe: Recipe) => void;
 }
 
-function DayColumn({ day, date, isToday, isPast, forceOpenAll, registerNode, onOpenRecipe }: DayColumnProps) {
-  const { days } = useRecipro();
-
-  // Sections with a meal already planned start open; empty ones start
-  // collapsed, except dinner (the app's original, most-used slot).
-  const [openSlots, setOpenSlots] = useState<MealSlot[]>(() =>
-    MEAL_SLOTS.filter((slot) => slot === "dinner" || days[day].some((a) => a.mealSlot === slot))
-  );
-
+function DayColumn({ day, date, isToday, isPast, registerNode, onOpenRecipe }: DayColumnProps) {
   return (
     <div
       ref={(node) => registerNode(day, node)}
-      className={`flex w-64 shrink-0 flex-col gap-2 rounded-2xl p-3 transition-colors ${
+      className={`flex w-64 shrink-0 flex-col gap-4 rounded-2xl p-3 transition-colors ${
         isPast ? "bg-muted/25 opacity-60" : "bg-muted/50"
       } ${isToday && !isPast ? "ring-1 ring-primary/40" : ""}`}
     >
@@ -221,33 +212,9 @@ function DayColumn({ day, date, isToday, isPast, forceOpenAll, registerNode, onO
         <span>{day}</span>
       </div>
 
-      <Accordion
-        multiple
-        value={forceOpenAll ? [...MEAL_SLOTS] : openSlots}
-        onValueChange={(value) => setOpenSlots(value as MealSlot[])}
-        className="w-full flex-col gap-1 rounded-none border-none bg-transparent"
-      >
-        {MEAL_SLOTS.map((slot) => {
-          const count = days[day].filter((a) => a.mealSlot === slot).length;
-          return (
-            <AccordionItem key={slot} value={slot} className="border-none data-open:bg-transparent">
-              <AccordionTrigger className="gap-2 p-1.5 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase hover:no-underline">
-                <span className="flex items-center gap-1.5">
-                  {MEAL_SLOT_LABELS[slot]}
-                  {count > 0 && (
-                    <Badge variant="secondary" className="h-4 min-w-4 justify-center px-1 text-[10px] normal-case">
-                      {count}
-                    </Badge>
-                  )}
-                </span>
-              </AccordionTrigger>
-              <AccordionContent className="px-0.5 pb-2">
-                <MealSlotContent day={day} slot={slot} isPast={isPast} onOpenRecipe={onOpenRecipe} />
-              </AccordionContent>
-            </AccordionItem>
-          );
-        })}
-      </Accordion>
+      {MEAL_SLOTS.map((slot) => (
+        <MealSlotSection key={slot} day={day} slot={slot} isPast={isPast} onOpenRecipe={onOpenRecipe} />
+      ))}
     </div>
   );
 }
@@ -361,7 +328,6 @@ export function WeekView({ onOpenRecipe }: { onOpenRecipe: (recipe: Recipe) => v
             date={dates[day]}
             isToday={day === todayDay}
             isPast={pastDays[day]}
-            forceOpenAll={activeId !== null}
             registerNode={registerNode}
             onOpenRecipe={onOpenRecipe}
           />

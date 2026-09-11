@@ -1,9 +1,13 @@
 "use client";
 
-/** The add/edit recipe dialog, including its dynamic ingredient and prep rows. */
+/**
+ * The recipe sheet: a read-only Markdown-style detail view with an "Edit
+ * recipe" action that switches the same sheet into a raw-Markdown editor.
+ * Saving parses that text back into the recipe's structured fields — see
+ * lib/recipe-markdown.ts for the format and the parser's rules.
+ */
 
-import { useState, type FormEvent } from "react";
-import { X } from "lucide-react";
+import { useState, type ChangeEvent } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,75 +18,166 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { blankRecipeMarkdown, parseRecipeMarkdown, recipeToMarkdown } from "@/lib/recipe-markdown";
 import { useRecipro } from "@/lib/recipro-context";
-import type { Ingredient, Recipe } from "@/lib/types";
+import type { Recipe } from "@/lib/types";
 
 interface Props {
-  /** The recipe being edited, or null when creating a new one, or undefined when the dialog is closed. */
+  /** The recipe being viewed/edited, or null when creating a new one, or undefined when the sheet is closed. */
   recipe: Recipe | null | undefined;
   open: boolean;
   onClose: () => void;
 }
 
-let rowKeySeq = 0;
-const nextRowKey = () => rowKeySeq++;
+function RecipeDetailView({
+  recipe,
+  onEdit,
+  onDeleteRequested,
+}: {
+  recipe: Recipe;
+  onEdit: () => void;
+  onDeleteRequested: () => void;
+}) {
+  return (
+    <>
+      <SheetHeader>
+        <SheetTitle>{recipe.name}</SheetTitle>
+      </SheetHeader>
+
+      <div className="flex flex-col gap-6 overflow-y-auto px-6 pb-6">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge variant="outline">{recipe.cookTimeMin} min</Badge>
+          <Badge variant="outline">
+            {recipe.servings} serving{recipe.servings === 1 ? "" : "s"}
+          </Badge>
+          {recipe.tags.map((tag) => (
+            <Badge key={tag}>{tag}</Badge>
+          ))}
+        </div>
+
+        <div>
+          <h3 className="mb-2 font-heading text-sm font-medium text-foreground">Ingredients</h3>
+          {recipe.ingredients.length ? (
+            <ul className="flex flex-col gap-1.5 text-sm text-foreground">
+              {recipe.ingredients.map((ing, i) => (
+                <li key={i} className="flex justify-between gap-3">
+                  <span>{ing.name}</span>
+                  {ing.qty && <span className="text-muted-foreground">{ing.qty}</span>}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground">No ingredients listed.</p>
+          )}
+        </div>
+
+        <div>
+          <h3 className="mb-2 font-heading text-sm font-medium text-foreground">Prep ahead</h3>
+          {recipe.prepSteps.length ? (
+            <ol className="flex flex-col gap-1.5 text-sm text-foreground">
+              {recipe.prepSteps.map((step, i) => (
+                <li key={i} className="flex gap-2">
+                  <span className="text-muted-foreground">{i + 1}.</span>
+                  <span>{step}</span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="text-sm text-muted-foreground">No prep-ahead steps.</p>
+          )}
+        </div>
+
+        <div>
+          <h3 className="mb-2 font-heading text-sm font-medium text-foreground">Instructions</h3>
+          <p className="text-sm whitespace-pre-wrap text-foreground">{recipe.instructions || "—"}</p>
+        </div>
+
+        <div className="flex items-center justify-between border-t border-border pt-4">
+          <Button type="button" variant="destructive" onClick={onDeleteRequested}>
+            Delete recipe
+          </Button>
+          <Button type="button" onClick={onEdit}>
+            Edit recipe
+          </Button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function RecipeMarkdownEditor({
+  recipe,
+  onSaved,
+  onCancel,
+}: {
+  recipe: Recipe | null;
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
+  const { saveRecipe } = useRecipro();
+  const [markdown, setMarkdown] = useState(() => (recipe ? recipeToMarkdown(recipe) : blankRecipeMarkdown()));
+  const [error, setError] = useState<string | null>(null);
+
+  function handleChange(event: ChangeEvent<HTMLTextAreaElement>) {
+    setMarkdown(event.target.value);
+    if (error) setError(null);
+  }
+
+  function handleSave() {
+    const parsed = parseRecipeMarkdown(markdown);
+    if (!parsed) {
+      setError('Add a title as a "# Recipe name" heading at the top before saving.');
+      return;
+    }
+    saveRecipe(recipe?.id ?? null, parsed);
+    onSaved();
+  }
+
+  return (
+    <>
+      <SheetHeader>
+        <SheetTitle>{recipe ? "Edit recipe" : "New recipe"}</SheetTitle>
+      </SheetHeader>
+
+      <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-6 pb-6">
+        <p className="text-xs text-muted-foreground">
+          Edit the recipe as Markdown. Keep the <code className="font-mono">#</code>, <code className="font-mono">##</code>,{" "}
+          <code className="font-mono">**Label:**</code>, and list markers intact so it can be read back correctly.
+        </p>
+        <Textarea
+          value={markdown}
+          onChange={handleChange}
+          spellCheck={false}
+          className="min-h-[50vh] flex-1 font-mono text-xs"
+        />
+        {error && <p className="text-sm text-destructive">{error}</p>}
+
+        <div className="flex justify-end gap-2 border-t border-border pt-4">
+          <Button type="button" variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button type="button" onClick={handleSave}>
+            Save recipe
+          </Button>
+        </div>
+      </div>
+    </>
+  );
+}
 
 /**
- * The form body. Keyed by the outer component on the recipe's id (see
- * RecipeDialog below) so opening a different recipe mounts a fresh instance
- * with its own initial state, rather than an effect reaching in to reset it.
+ * Keyed by the outer component on the recipe's id (see RecipeDialog below)
+ * so opening a different recipe mounts a fresh instance with its own
+ * initial state, rather than an effect reaching in to reset it.
  */
-function RecipeForm({ recipe, onClose }: { recipe: Recipe | null; onClose: () => void }) {
-  const { saveRecipe, deleteRecipe } = useRecipro();
+function RecipeDialogBody({ recipe, onClose }: { recipe: Recipe | null; onClose: () => void }) {
+  const { deleteRecipe } = useRecipro();
+  const [mode, setMode] = useState<"view" | "edit">(recipe ? "view" : "edit");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-
-  const [name, setName] = useState(recipe?.name ?? "");
-  const [time, setTime] = useState(recipe ? String(recipe.cookTimeMin) : "");
-  const [servings, setServings] = useState(recipe ? String(recipe.servings) : "");
-  const [tags, setTags] = useState(recipe ? (recipe.tags || []).join(", ") : "");
-  const [instructions, setInstructions] = useState(recipe?.instructions ?? "");
-  const [ingredientRows, setIngredientRows] = useState(() =>
-    recipe?.ingredients.length
-      ? recipe.ingredients.map((i) => ({ key: nextRowKey(), name: i.name, qty: i.qty }))
-      : [{ key: nextRowKey(), name: "", qty: "" }]
-  );
-  const [prepRows, setPrepRows] = useState(() =>
-    recipe?.prepSteps.length
-      ? recipe.prepSteps.map((step) => ({ key: nextRowKey(), text: step }))
-      : [{ key: nextRowKey(), text: "" }]
-  );
-
-  function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-    const trimmedName = name.trim();
-    if (!trimmedName) return;
-
-    const ingredients: Ingredient[] = ingredientRows
-      .map((row) => ({ name: row.name.trim(), qty: row.qty.trim() }))
-      .filter((ingredient) => ingredient.name);
-
-    const prepSteps = prepRows.map((row) => row.text.trim()).filter(Boolean);
-    const parsedTags = tags
-      .split(",")
-      .map((tag) => tag.trim())
-      .filter(Boolean);
-
-    saveRecipe(recipe?.id ?? null, {
-      name: trimmedName,
-      cookTimeMin: parseInt(time, 10) || 0,
-      servings: parseInt(servings, 10) || 1,
-      tags: parsedTags,
-      ingredients,
-      prepSteps,
-      instructions: instructions.trim(),
-    });
-    onClose();
-  }
 
   function handleDelete() {
     if (!recipe) return;
@@ -92,147 +187,15 @@ function RecipeForm({ recipe, onClose }: { recipe: Recipe | null; onClose: () =>
 
   return (
     <>
-      <SheetHeader>
-        <SheetTitle>{recipe ? "Edit recipe" : "New recipe"}</SheetTitle>
-      </SheetHeader>
-
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4 overflow-y-auto px-6 pb-6">
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="rName">Name</Label>
-          <Input id="rName" required value={name} onChange={(e) => setName(e.target.value)} />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="rTime">Instant Pot time (min)</Label>
-            <Input type="number" id="rTime" min={1} required value={time} onChange={(e) => setTime(e.target.value)} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="rServings">Servings</Label>
-            <Input
-              type="number"
-              id="rServings"
-              min={1}
-              required
-              value={servings}
-              onChange={(e) => setServings(e.target.value)}
-            />
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="rTags">Tags (comma separated)</Label>
-          <Input id="rTags" placeholder="dal, vegan, weeknight" value={tags} onChange={(e) => setTags(e.target.value)} />
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <Label>Ingredients</Label>
-          <div className="flex flex-col gap-2">
-            {ingredientRows.map((row) => (
-              <div className="flex gap-2" key={row.key}>
-                <Input
-                  placeholder="Ingredient"
-                  aria-label="Ingredient"
-                  value={row.name}
-                  onChange={(e) =>
-                    setIngredientRows((rows) => rows.map((r) => (r.key === row.key ? { ...r, name: e.target.value } : r)))
-                  }
-                />
-                <Input
-                  placeholder="Qty"
-                  aria-label="Quantity"
-                  className="w-28 shrink-0"
-                  value={row.qty}
-                  onChange={(e) =>
-                    setIngredientRows((rows) => rows.map((r) => (r.key === row.key ? { ...r, qty: e.target.value } : r)))
-                  }
-                />
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  type="button"
-                  aria-label="Remove ingredient"
-                  onClick={() => setIngredientRows((rows) => rows.filter((r) => r.key !== row.key))}
-                >
-                  <X />
-                </Button>
-              </div>
-            ))}
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="w-fit"
-            onClick={() => setIngredientRows((rows) => [...rows, { key: nextRowKey(), name: "", qty: "" }])}
-          >
-            + Add ingredient
-          </Button>
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <Label>Prep ahead steps</Label>
-          <div className="flex flex-col gap-2">
-            {prepRows.map((row) => (
-              <div className="flex gap-2" key={row.key}>
-                <Input
-                  placeholder="Prep step"
-                  aria-label="Prep step"
-                  value={row.text}
-                  onChange={(e) =>
-                    setPrepRows((rows) => rows.map((r) => (r.key === row.key ? { ...r, text: e.target.value } : r)))
-                  }
-                />
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  type="button"
-                  aria-label="Remove step"
-                  onClick={() => setPrepRows((rows) => rows.filter((r) => r.key !== row.key))}
-                >
-                  <X />
-                </Button>
-              </div>
-            ))}
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="w-fit"
-            onClick={() => setPrepRows((rows) => [...rows, { key: nextRowKey(), text: "" }])}
-          >
-            + Add prep step
-          </Button>
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="rInstructions">Instructions</Label>
-          <Textarea
-            id="rInstructions"
-            required
-            className="min-h-24"
-            value={instructions}
-            onChange={(e) => setInstructions(e.target.value)}
-          />
-        </div>
-
-        <div className="flex items-center justify-between pt-2">
-          {recipe ? (
-            <Button type="button" variant="destructive" onClick={() => setConfirmingDelete(true)}>
-              Delete recipe
-            </Button>
-          ) : (
-            <span />
-          )}
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit">Save recipe</Button>
-          </div>
-        </div>
-      </form>
+      {mode === "edit" || !recipe ? (
+        <RecipeMarkdownEditor
+          recipe={recipe}
+          onSaved={onClose}
+          onCancel={() => (recipe ? setMode("view") : onClose())}
+        />
+      ) : (
+        <RecipeDetailView recipe={recipe} onEdit={() => setMode("edit")} onDeleteRequested={() => setConfirmingDelete(true)} />
+      )}
 
       <AlertDialog open={confirmingDelete} onOpenChange={setConfirmingDelete}>
         <AlertDialogContent>
@@ -255,10 +218,8 @@ function RecipeForm({ recipe, onClose }: { recipe: Recipe | null; onClose: () =>
 export function RecipeDialog({ recipe, open, onClose }: Props) {
   return (
     <Sheet open={open} onOpenChange={(next) => !next && onClose()}>
-      <SheetContent side="right" className="data-[side=right]:w-full data-[side=right]:sm:max-w-3xl">
-        {/* Keyed on the recipe so switching recipes mounts a fresh form
-            instead of an effect resetting an existing one's state. */}
-        {open && <RecipeForm key={recipe?.id ?? "new"} recipe={recipe ?? null} onClose={onClose} />}
+      <SheetContent side="right" className="flex flex-col data-[side=right]:w-full data-[side=right]:sm:max-w-lg">
+        {open && <RecipeDialogBody key={recipe?.id ?? "new"} recipe={recipe ?? null} onClose={onClose} />}
       </SheetContent>
     </Sheet>
   );

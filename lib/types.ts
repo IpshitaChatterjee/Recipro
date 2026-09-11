@@ -31,7 +31,7 @@ export type RecipeInput = Omit<Recipe, "id">;
 export const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 export type Day = (typeof DAYS)[number];
 
-export const MEAL_SLOTS = ["breakfast", "lunch", "dinner"] as const;
+export const MEAL_SLOTS = ["lunch", "dinner"] as const;
 export type MealSlot = (typeof MEAL_SLOTS)[number];
 
 export interface Assignment {
