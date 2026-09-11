@@ -4,7 +4,7 @@
 
 import { Checkbox } from "@/components/ui/checkbox";
 
-export function PantryCheckbox({
+export function ChecklistRow({
   checked,
   onChange,
   label,

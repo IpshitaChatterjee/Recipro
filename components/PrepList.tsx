@@ -2,7 +2,8 @@
 
 /** Prep-ahead steps for every meal planned this week. */
 
-import { PantryCheckbox } from "@/components/PantryCheckbox";
+import { ChecklistRow } from "@/components/ChecklistRow";
+import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { useRecipro } from "@/lib/recipro-context";
 import { DAYS } from "@/lib/types";
@@ -38,13 +39,19 @@ export function PrepList() {
               </div>
               <div>
                 {recipe.prepSteps.map((step, index) => (
-                  <PantryCheckbox
-                    key={index}
-                    checked={Boolean(assignment.prepDone?.[index])}
-                    onChange={() => togglePrepStep(day, assignment.id, index)}
-                    label={step}
-                    strike
-                  />
+                  <div key={index} className="flex items-center gap-2">
+                    <ChecklistRow
+                      checked={Boolean(assignment.prepDone?.[index])}
+                      onChange={() => togglePrepStep(day, assignment.id, index)}
+                      label={step.text}
+                      strike
+                    />
+                    {step.nightBefore && (
+                      <Badge variant="secondary" className="shrink-0">
+                        Night before
+                      </Badge>
+                    )}
+                  </div>
                 ))}
               </div>
             </Card>

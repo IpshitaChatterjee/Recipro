@@ -7,8 +7,7 @@ const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
   title: "Recipro — Weekly Instant Pot Planning",
-  description:
-    "Plan a week of Instant Pot meals, track what your pantry is missing, and work through prep-ahead steps.",
+  description: "Plan a week of Instant Pot meals and work through prep-ahead steps, including what to do the night before.",
 };
 
 export const viewport: Viewport = {

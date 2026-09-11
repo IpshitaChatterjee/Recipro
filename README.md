@@ -1,7 +1,8 @@
 # Recipro
 
-Weekly Instant Pot meal planning — plan a week of meals, see what your pantry
-is missing, and work through prep-ahead steps.
+Weekly Instant Pot meal planning — plan a week of meals, see what to buy for
+them, and work through prep-ahead steps, including what needs doing the
+night before.
 
 Built with [Next.js](https://nextjs.org) (App Router, TypeScript), styled with
 [Tailwind CSS](https://tailwindcss.com) and [shadcn/ui](https://ui.shadcn.com),
@@ -17,8 +18,12 @@ against it (SQL Editor, or `supabase db push` if you use the CLI):
 ```bash
 # in the Supabase SQL Editor, run in order:
 supabase/schema.sql   # tables, triggers, RLS policies
-supabase/seed.sql      # starter pantry, recipes, and an example week (optional)
+supabase/seed.sql      # starter recipes and an example week (optional)
 ```
+
+Upgrading a project set up before the Pantry tab was removed? It's harmless to
+leave the old `pantry_items` table in place, but `supabase/migrate-drop-pantry.sql`
+deletes it if you'd rather clean it up.
 
 ### 2. Configure environment variables
 
@@ -56,18 +61,19 @@ components/
                             `npx shadcn@latest add <component>`.
   ReciproApp.tsx           Top-level shell: tabs, panels, the recipe editor
   Header.tsx               Brand + week picker
-  Tabs.tsx                 This week / Recipes / Pantry tablist
-  WeekView.tsx             The seven day cards
-  ShoppingList.tsx         Missing ingredients + household items
-  PrepList.tsx             Prep-ahead checklist
+  Tabs.tsx                 Meal plan / Recipes tablist
+  WeekView.tsx             The Kanban board of day columns
+  ShoppingList.tsx         Every ingredient this week's meals need
+  PrepList.tsx             Prep-ahead checklist, incl. night-before steps
   RecipesView.tsx          Recipe cards grid
-  PantryView.tsx           Stock lists and add forms
-  RecipeDialog.tsx         Add/edit recipe form, in a slide-out Sheet
-  PantryCheckbox.tsx       Checklist row (checkbox + label + optional strike)
+  RecipeDialog.tsx         Markdown-based recipe viewer/editor, in a Sheet
+  ChecklistRow.tsx         Checklist row (checkbox + label + optional strike)
 
 lib/
-  types.ts                 Shared domain types (PantryItem, Recipe, MealPlan, …)
+  types.ts                 Shared domain types (Recipe, PrepStep, MealPlan, …)
   dates.ts                 Week ids, week ranges, the DAYS constant
+  ingredient-name.ts       Strips prep-state words for the shopping list
+  recipe-markdown.ts       Recipe ⇄ Markdown serializer/parser
   utils.ts                 shadcn's `cn()` class-merging helper
   recipro-context.tsx      All application state and the only module that
                             talks to Supabase — see "Data flow" below
@@ -77,7 +83,8 @@ lib/
 
 supabase/
   schema.sql                Tables, triggers, RLS policies, realtime config
-  seed.sql                   Starter pantry, recipes, and an example week
+  seed.sql                   Starter recipes and an example week
+  migrate-drop-pantry.sql    Optional cleanup for pre-Pantry-removal projects
 
 components.json             shadcn/ui config (style, aliases, base color)
 .env.local.example          Required environment variables
@@ -85,12 +92,12 @@ components.json             shadcn/ui config (style, aliases, base color)
 
 ### Data flow
 
-`ReciproProvider` (in `lib/recipro-context.tsx`) owns all state — pantry,
-recipes, and the selected week's meal plan — behind a `useRecipro()` hook.
-Views never call Supabase directly:
+`ReciproProvider` (in `lib/recipro-context.tsx`) owns all state — recipes and
+the selected week's meal plan — behind a `useRecipro()` hook. Views never call
+Supabase directly:
 
-1. A component calls an action from `useRecipro()` (`assignRecipe`,
-   `togglePantryHave`, `saveRecipe`, …).
+1. A component calls an action from `useRecipro()` (`addMeal`, `moveMeal`,
+   `saveRecipe`, …).
 2. The action updates React state immediately (so the UI feels instant) and
    writes to Supabase in the background.
 3. Supabase Realtime subscriptions (set up once, on mount) push any change —
@@ -99,27 +106,36 @@ Views never call Supabase directly:
 
 ### Persistence
 
-Three tables, defined in `supabase/schema.sql`:
+Two tables, defined in `supabase/schema.sql`:
 
-| Table          | Purpose                                              |
-| -------------- | ----------------------------------------------------- |
-| `pantry_items` | Household items (manually managed) and ingredients (auto-synced from recipes — see below), and whether in stock |
-| `recipes`      | Name, cook time, servings, tags, ingredients, prep steps, instructions |
-| `mealplans`    | One row per week (keyed by that week's Monday, e.g. `2026-09-07`), holding the list of recipes assigned to each day (a day can hold any number of meals) and each one's prep checklist |
+| Table       | Purpose                                              |
+| ----------- | ----------------------------------------------------- |
+| `recipes`   | Name, cook time, servings, tags, ingredients, prep steps (each with a night-before flag), instructions |
+| `mealplans` | One row per week (keyed by that week's Monday, e.g. `2026-09-07`), holding the list of recipes assigned to each day (a day can hold any number of meals) and each one's prep checklist |
 
-Pantry ingredients aren't added by hand: a sync effect in
-`recipro-context.tsx` watches `recipes` and keeps exactly one pantry row per
-distinct ingredient name used across all recipes, defaulting new ones to in
-stock. An ingredient no longer used by any recipe is removed. Only household
-items go through the add/remove UI in the Pantry tab.
+There's no separate pantry/stock table — the shopping list is computed
+directly from this week's planned meals' ingredients (deduplicated by plain
+grocery-item name, see `lib/ingredient-name.ts`) and isn't persisted; checking
+an item off just crosses it out for that viewing session.
 
 Recipro has no login — it's a single household's planner, and the browser
 talks to Supabase directly with the public anon key. Row Level Security is
-enabled on all three tables with policies that grant the anon role full
-access (see the comment in `schema.sql`). That means anyone with the project
-URL and anon key can read and write this data, which is an acceptable
-tradeoff for a personal app — but if you ever add multiple households, swap
-those policies for per-user ones keyed on `auth.uid()` before that ships.
+enabled on both tables with policies that grant the anon role full access
+(see the comment in `schema.sql`). That means anyone with the project URL and
+anon key can read and write this data, which is an acceptable tradeoff for a
+personal app — but if you ever add multiple households, swap those policies
+for per-user ones keyed on `auth.uid()` before that ships.
+
+## Recipes as Markdown
+
+Opening a recipe shows a read-only detail view; **Edit recipe** switches to
+a plain-text Markdown editor (`lib/recipe-markdown.ts`) instead of a
+structured form. The format is fixed — `#` for the title, `**Label:**` lines
+for tags/cook time/servings, `##` section headings, `-` for ingredients,
+`1.` for prep steps — so keep those markers intact while editing the prose
+around them. Add `(night before)` to the end of a prep step to flag it as
+something to do the night before (e.g. `1. Soak rajma (night before)`); it
+shows as a badge in the detail view and on the week's Prep ahead checklist.
 
 ## Styling
 

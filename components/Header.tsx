@@ -18,7 +18,7 @@ export function Header() {
         </div>
         <div>
           <h1 className="font-heading text-lg font-semibold text-foreground">Recipro</h1>
-          <p className="text-sm text-muted-foreground">Weekly Instant Pot planning &mdash; pantry, recipes, prep</p>
+          <p className="text-sm text-muted-foreground">Weekly Instant Pot planning &mdash; recipes, meal plan, prep</p>
         </div>
       </div>
       <div className="flex items-center gap-2">

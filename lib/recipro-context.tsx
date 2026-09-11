@@ -20,9 +20,8 @@ import {
 } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
-import { mealPlanFromRow, pantryItemFromRow, recipeFromRow, recipeToRow } from "@/lib/supabase/rows";
+import { mealPlanFromRow, recipeFromRow, recipeToRow } from "@/lib/supabase/rows";
 import { THIS_WEEK_ID } from "@/lib/dates";
-import { normalizeIngredientName } from "@/lib/ingredient-name";
 import {
   emptyDays,
   newAssignment,
@@ -31,7 +30,6 @@ import {
   type Day,
   type Days,
   type MealSlot,
-  type PantryCategory,
   type Recipe,
   type RecipeInput,
 } from "@/lib/types";
@@ -43,7 +41,6 @@ interface ReciproState {
   selectedWeekId: string;
   days: Days;
   recipes: Recipe[];
-  pantry: import("@/lib/types").PantryItem[];
 }
 
 interface ReciproActions {
@@ -52,13 +49,9 @@ interface ReciproActions {
   removeMeal: (day: Day, assignmentId: string) => void;
   moveMeal: (fromDay: Day, assignmentId: string, toDay: Day, toSlot: MealSlot, toIndex: number) => void;
   togglePrepStep: (day: Day, assignmentId: string, index: number) => void;
-  togglePantryHave: (id: string) => void;
-  addPantryItem: (category: PantryCategory, name: string, have?: boolean) => void;
-  deletePantryItem: (id: string) => void;
   saveRecipe: (id: string | null, data: RecipeInput) => void;
   deleteRecipe: (id: string) => void;
   findRecipe: (id: string) => Recipe | undefined;
-  findPantryItemByName: (name: string) => import("@/lib/types").PantryItem | undefined;
 }
 
 type ReciproContextValue = ReciproState & ReciproActions;
@@ -86,7 +79,6 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
   const [selectedWeekId, setSelectedWeekId] = useState(THIS_WEEK_ID);
   const [days, setDays] = useState<Days>(emptyDays());
   const [recipes, setRecipes] = useState<Recipe[]>([]);
-  const [pantry, setPantry] = useState<import("@/lib/types").PantryItem[]>([]);
 
   // Kept in a ref so the realtime mealplan callback (subscribed once, see
   // below) always checks the *current* selection without needing to
@@ -97,16 +89,6 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
   }, [selectedWeekId]);
 
   const findRecipe = useCallback((id: string) => recipes.find((r) => r.id === id), [recipes]);
-  const findPantryItemByName = useCallback(
-    (name: string) => {
-      // Accepts either a pantry item's own name or a raw recipe ingredient
-      // name ("Dried chickpeas") — normalizing here matches it to the
-      // pantry's plain grocery-item name ("Chickpeas") either way.
-      const needle = normalizeIngredientName(name).toLowerCase();
-      return pantry.find((item) => item.name.trim().toLowerCase() === needle);
-    },
-    [pantry]
-  );
 
   /** Load one week's plan, creating an empty row if none exists yet. */
   const loadWeek = useCallback(
@@ -131,42 +113,28 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
     [supabase]
   );
 
-  // Initial load: pantry, recipes, and the starting week, plus realtime
-  // subscriptions so other tabs/devices stay in sync.
+  // Initial load: recipes and the starting week, plus realtime subscriptions
+  // so other tabs/devices stay in sync.
   useEffect(() => {
     let cancelled = false;
     const channels: RealtimeChannel[] = [];
 
     async function init() {
-      const [{ data: pantryRows, error: pantryErr }, { data: recipeRows, error: recipeErr }] = await Promise.all([
-        supabase.from("pantry_items").select("*"),
-        supabase.from("recipes").select("*"),
-      ]);
+      const { data: recipeRows, error: recipeErr } = await supabase.from("recipes").select("*");
 
       if (cancelled) return;
 
-      if (pantryErr || recipeErr) {
-        setError((pantryErr ?? recipeErr)!.message);
+      if (recipeErr) {
+        setError(recipeErr.message);
         setLoading(false);
         return;
       }
 
-      setPantry((pantryRows ?? []).map(pantryItemFromRow));
       setRecipes((recipeRows ?? []).map(recipeFromRow));
       await loadWeek(selectedWeekIdRef.current);
       if (!cancelled) setLoading(false);
 
       channels.push(
-        supabase
-          .channel("pantry_items-changes")
-          .on("postgres_changes", { event: "*", schema: "public", table: "pantry_items" }, () => {
-            supabase
-              .from("pantry_items")
-              .select("*")
-              .then(({ data }) => data && setPantry(data.map(pantryItemFromRow)));
-          })
-          .subscribe(),
-
         supabase
           .channel("recipes-changes")
           .on("postgres_changes", { event: "*", schema: "public", table: "recipes" }, () => {
@@ -206,63 +174,6 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
     },
     [loadWeek]
   );
-
-  // Names with an add/remove currently in flight, so a second effect run
-  // before Realtime echoes the write back (see below) doesn't fire a
-  // duplicate — e.g. editing a recipe's ingredients row by row can re-run
-  // this effect several times before the first write round-trips.
-  const pendingIngredientSyncRef = useRef<Set<string>>(new Set());
-
-  // Keep the pantry's ingredient rows in sync with what the recipes actually
-  // use: every distinct ingredient name across all recipes gets exactly one
-  // pantry row (in stock by default — new ingredients aren't assumed to be
-  // missing), and ingredient rows no longer used by any recipe are removed.
-  // Household/misc items are untouched; those stay manually managed. Skipped
-  // until the initial load finishes so this can't run against an empty
-  // recipes list and wipe out pantry ingredients before they've arrived.
-  //
-  // No optimistic local setPantry here: the pantry_items realtime
-  // subscription (above) already re-fetches and updates state for any
-  // change, including ones this same write makes.
-  useEffect(() => {
-    if (loading) return;
-    const pending = pendingIngredientSyncRef.current;
-
-    const used = new Map<string, string>(); // lowercase normalized name -> its display casing
-    for (const recipe of recipes) {
-      for (const ingredient of recipe.ingredients) {
-        if (!ingredient.name.trim()) continue;
-        const normalized = normalizeIngredientName(ingredient.name);
-        const key = normalized.toLowerCase();
-        if (!used.has(key)) used.set(key, normalized);
-      }
-    }
-
-    const existingIngredients = pantry.filter((item) => item.category === "ingredient");
-    const existingNames = new Set(existingIngredients.map((item) => item.name.trim().toLowerCase()));
-
-    for (const [key, name] of used) {
-      if (existingNames.has(key) || pending.has(key)) continue;
-      pending.add(key);
-      supabase
-        .from("pantry_items")
-        .insert({ id: `ing-${crypto.randomUUID().slice(0, 8)}`, name, category: "ingredient", have: true })
-        .then(logIfFailed("add pantry ingredient"))
-        .then(() => pending.delete(key));
-    }
-
-    for (const item of existingIngredients) {
-      const key = item.name.trim().toLowerCase();
-      if (used.has(key) || pending.has(key)) continue;
-      pending.add(key);
-      supabase
-        .from("pantry_items")
-        .delete()
-        .eq("id", item.id)
-        .then(logIfFailed("remove pantry ingredient"))
-        .then(() => pending.delete(key));
-    }
-  }, [recipes, pantry, loading, supabase]);
 
   const saveDays = useCallback(
     (next: Days) => {
@@ -334,44 +245,6 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
     [days, saveDays]
   );
 
-  const togglePantryHave = useCallback(
-    (id: string) => {
-      const item = pantry.find((p) => p.id === id);
-      if (!item) return;
-      const have = !item.have;
-      setPantry((prev) => prev.map((p) => (p.id === id ? { ...p, have } : p)));
-      supabase.from("pantry_items").update({ have }).eq("id", id).then(logIfFailed("update pantry item"));
-    },
-    [pantry, supabase]
-  );
-
-  const addPantryItem = useCallback(
-    (category: PantryCategory, rawName: string, have = true) => {
-      const name = rawName.trim();
-      if (!name) return;
-
-      const existing = findPantryItemByName(name);
-      if (existing) {
-        if (!existing.have && have) togglePantryHave(existing.id);
-        return;
-      }
-
-      const id = `${category === "misc" ? "misc" : "ing"}-${crypto.randomUUID().slice(0, 8)}`;
-      const item = { id, name, category, have };
-      setPantry((prev) => [...prev, item]);
-      supabase.from("pantry_items").insert(item).then(logIfFailed("add pantry item"));
-    },
-    [findPantryItemByName, supabase, togglePantryHave]
-  );
-
-  const deletePantryItem = useCallback(
-    (id: string) => {
-      setPantry((prev) => prev.filter((item) => item.id !== id));
-      supabase.from("pantry_items").delete().eq("id", id).then(logIfFailed("delete pantry item"));
-    },
-    [supabase]
-  );
-
   const saveRecipe = useCallback(
     (id: string | null, data: RecipeInput) => {
       const recipeId = id ?? `recipe-${crypto.randomUUID().slice(0, 8)}`;
@@ -400,19 +273,14 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
     selectedWeekId,
     days,
     recipes,
-    pantry,
     selectWeek,
     addMeal,
     removeMeal,
     moveMeal,
     togglePrepStep,
-    togglePantryHave,
-    addPantryItem,
-    deletePantryItem,
     saveRecipe,
     deleteRecipe,
     findRecipe,
-    findPantryItemByName,
   };
 
   return <ReciproContext.Provider value={value}>{children}</ReciproContext.Provider>;

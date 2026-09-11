@@ -7,7 +7,6 @@ import { WeekView } from "@/components/WeekView";
 import { ShoppingList } from "@/components/ShoppingList";
 import { PrepList } from "@/components/PrepList";
 import { RecipesView } from "@/components/RecipesView";
-import { PantryView } from "@/components/PantryView";
 import { RecipeDialog } from "@/components/RecipeDialog";
 import { Card } from "@/components/ui/card";
 import { ReciproProvider, useRecipro } from "@/lib/recipro-context";
@@ -54,10 +53,6 @@ function AppShell() {
 
       <section hidden={tab !== "recipes"}>
         <RecipesView onNewRecipe={() => setDialogRecipe(null)} onEditRecipe={setDialogRecipe} />
-      </section>
-
-      <section hidden={tab !== "pantry"}>
-        <PantryView />
       </section>
 
       <RecipeDialog recipe={dialogRecipe} open={dialogRecipe !== undefined} onClose={() => setDialogRecipe(undefined)} />

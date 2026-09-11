@@ -4,10 +4,12 @@
  * general Markdown), which keeps `parseRecipeMarkdown` a straightforward,
  * bounded reversal of `recipeToMarkdown` rather than a general-purpose
  * Markdown parser — editing free-form prose still works as long as the
- * structural markers (#, ##, **Label:**, "- ", "1.") stay intact.
+ * structural markers (#, ##, **Label:**, "- ", "1.") stay intact. A prep
+ * step written with a trailing "(night before)" — e.g. "1. Soak rajma
+ * (night before)" — is flagged as needing to happen the night before.
  */
 
-import type { Ingredient, Recipe, RecipeInput } from "@/lib/types";
+import type { Ingredient, PrepStep, Recipe, RecipeInput } from "@/lib/types";
 
 const SECTION_HEADINGS = {
   ingredients: "Ingredients",
@@ -32,7 +34,9 @@ export function recipeToMarkdown(recipe: Recipe | RecipeInput): string {
     "",
     `## ${SECTION_HEADINGS.prepAhead}`,
     "",
-    ...(recipe.prepSteps.length ? recipe.prepSteps.map((step, i) => `${i + 1}. ${step}`) : ["1. "]),
+    ...(recipe.prepSteps.length
+      ? recipe.prepSteps.map((step, i) => `${i + 1}. ${step.text}${step.nightBefore ? " (night before)" : ""}`)
+      : ["1. "]),
     "",
     `## ${SECTION_HEADINGS.instructions}`,
     "",
@@ -58,6 +62,8 @@ const META_LINE = /^\*\*(.+?):\*\*\s*(.*)$/;
 const HEADING_LINE = /^##\s+(.*)$/;
 const BULLET_LINE = /^[-*]\s+(.*)$/;
 const NUMBERED_LINE = /^\d+[.)]\s+(.*)$/;
+/** Trailing "(night before)" marker on a prep step, e.g. "Soak rajma (night before)". */
+const NIGHT_BEFORE_SUFFIX = /\s*\(night before\)\s*$/i;
 
 function parseIngredientLine(line: string): Ingredient | null {
   const match = BULLET_LINE.exec(line.trim());
@@ -117,14 +123,18 @@ export function parseRecipeMarkdown(markdown: string): RecipeInput | null {
     .filter((i): i is Ingredient => i !== null);
 
   const prepLines = sections.get(SECTION_HEADINGS.prepAhead.toLowerCase()) ?? [];
-  const prepSteps = prepLines
-    .map((line) => {
+  const prepSteps: PrepStep[] = prepLines
+    .map((line): PrepStep | null => {
       const numbered = NUMBERED_LINE.exec(line.trim());
-      if (numbered) return numbered[1].trim();
-      const bulleted = BULLET_LINE.exec(line.trim());
-      return bulleted ? bulleted[1].trim() : "";
+      const bulleted = numbered ? null : BULLET_LINE.exec(line.trim());
+      const raw = (numbered ?? bulleted)?.[1].trim();
+      if (!raw) return null;
+
+      const nightBefore = NIGHT_BEFORE_SUFFIX.test(raw);
+      const text = raw.replace(NIGHT_BEFORE_SUFFIX, "").trim();
+      return text ? { text, nightBefore } : null;
     })
-    .filter(Boolean);
+    .filter((step): step is PrepStep => step !== null);
 
   const instructionLines = sections.get(SECTION_HEADINGS.instructions.toLowerCase()) ?? [];
   const instructions = instructionLines.join("\n").trim();

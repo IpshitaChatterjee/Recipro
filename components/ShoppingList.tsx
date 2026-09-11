@@ -1,19 +1,22 @@
 "use client";
 
 /**
- * The shopping list: every ingredient this week's planned meals need that the
- * pantry does not have, plus any household item marked out of stock.
+ * The shopping list: every ingredient this week's planned meals need,
+ * deduplicated by its plain grocery-item name. There's no stock tracking —
+ * checking an item off just crosses it out for this viewing session (not
+ * persisted, not shared across tabs/devices).
  */
 
-import { useMemo } from "react";
-import { PantryCheckbox } from "@/components/PantryCheckbox";
+import { useMemo, useState } from "react";
+import { ChecklistRow } from "@/components/ChecklistRow";
 import { Card } from "@/components/ui/card";
 import { normalizeIngredientName } from "@/lib/ingredient-name";
 import { useRecipro } from "@/lib/recipro-context";
 import { DAYS } from "@/lib/types";
 
 export function ShoppingList() {
-  const { days, pantry, findRecipe, findPantryItemByName, togglePantryHave, addPantryItem } = useRecipro();
+  const { days, findRecipe } = useRecipro();
+  const [checkedOff, setCheckedOff] = useState<Set<string>>(new Set());
 
   const { needed, anyPlanned } = useMemo(() => {
     const needed = new Map<string, string[]>();
@@ -26,9 +29,6 @@ export function ShoppingList() {
         anyPlanned = true;
 
         for (const ingredient of recipe.ingredients) {
-          const pantryItem = findPantryItemByName(ingredient.name);
-          if (pantryItem?.have) continue;
-
           const name = normalizeIngredientName(ingredient.name);
           if (!needed.has(name)) needed.set(name, []);
           const wantedBy = needed.get(name)!;
@@ -38,11 +38,18 @@ export function ShoppingList() {
     }
 
     return { needed, anyPlanned };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [days, pantry]);
+  }, [days, findRecipe]);
 
-  const household = pantry.filter((item) => item.category === "misc" && !item.have);
-  const total = needed.size + household.length;
+  function toggle(name: string) {
+    setCheckedOff((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }
+
+  const total = needed.size;
 
   return (
     <section>
@@ -58,47 +65,24 @@ export function ShoppingList() {
       {total === 0 ? (
         <Card className="items-center px-6 text-center text-sm text-muted-foreground">
           {anyPlanned
-            ? "You have everything you need for this week."
-            : "Nothing planned yet. Add meals to the days above and anything missing from your pantry will show up here."}
+            ? "No ingredients needed — every planned meal this week has none listed."
+            : "Nothing planned yet. Add meals to the days above and everything they need will show up here."}
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {needed.size > 0 && (
-            <Card className="px-4">
-              <h3 className="mb-1 text-sm font-medium text-foreground">Ingredients</h3>
-              <div>
-                {[...needed].map(([name, wantedBy]) => (
-                  <PantryCheckbox
-                    key={name}
-                    checked={false}
-                    onChange={() => {
-                      const pantryItem = findPantryItemByName(name);
-                      if (pantryItem) togglePantryHave(pantryItem.id);
-                      else addPantryItem("ingredient", name, true);
-                    }}
-                    label={name}
-                    subText={`for ${wantedBy.join(", ")}`}
-                  />
-                ))}
-              </div>
-            </Card>
-          )}
-          {household.length > 0 && (
-            <Card className="px-4">
-              <h3 className="mb-1 text-sm font-medium text-foreground">Household</h3>
-              <div>
-                {household.map((item) => (
-                  <PantryCheckbox
-                    key={item.id}
-                    checked={false}
-                    onChange={() => togglePantryHave(item.id)}
-                    label={item.name}
-                  />
-                ))}
-              </div>
-            </Card>
-          )}
-        </div>
+        <Card className="px-4">
+          <div>
+            {[...needed].map(([name, wantedBy]) => (
+              <ChecklistRow
+                key={name}
+                checked={checkedOff.has(name)}
+                onChange={() => toggle(name)}
+                label={name}
+                subText={`for ${wantedBy.join(", ")}`}
+                strike
+              />
+            ))}
+          </div>
+        </Card>
       )}
     </section>
   );

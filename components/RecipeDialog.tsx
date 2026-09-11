@@ -106,9 +106,14 @@ function RecipeDetailView({
           {recipe.prepSteps.length ? (
             <ol className="flex flex-col gap-1.5 text-sm text-foreground">
               {recipe.prepSteps.map((step, i) => (
-                <li key={i} className="flex gap-2">
+                <li key={i} className="flex items-baseline gap-2">
                   <span className="text-muted-foreground">{i + 1}.</span>
-                  <span>{step}</span>
+                  <span>{step.text}</span>
+                  {step.nightBefore && (
+                    <Badge variant="secondary" className="shrink-0">
+                      Night before
+                    </Badge>
+                  )}
                 </li>
               ))}
             </ol>
@@ -183,7 +188,9 @@ function RecipeMarkdownEditor({
       <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-6 pb-6">
         <p className="text-xs text-muted-foreground">
           Edit the recipe as Markdown. Keep the <code className="font-mono">#</code>, <code className="font-mono">##</code>,{" "}
-          <code className="font-mono">**Label:**</code>, and list markers intact so it can be read back correctly.
+          <code className="font-mono">**Label:**</code>, and list markers intact so it can be read back correctly. Add{" "}
+          <code className="font-mono">(night before)</code> to the end of a prep step to flag it as something to do
+          the night before, e.g. <code className="font-mono">1. Soak rajma (night before)</code>.
         </p>
         <Textarea
           value={markdown}

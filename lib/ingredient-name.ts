@@ -1,10 +1,10 @@
 /**
  * Recipe ingredient names are written for cooking ("Dried chickpeas", "Whole
  * spices (bay leaf, cloves, cardamom)") — precise about prep state, which is
- * exactly what a pantry/shopping list doesn't need. This strips that down to
- * the plain grocery item, so the pantry shows "Chickpeas" instead. Only used
- * for the derived pantry/shopping-list layer — a recipe's own ingredient
- * list keeps the text as written.
+ * exactly what a shopping list doesn't need. This strips that down to the
+ * plain grocery item, so the list shows "Chickpeas" instead. A recipe's own
+ * ingredient list keeps the text as written; this is only used when grouping
+ * ingredients for the shopping list.
  */
 
 /** Leading prep-state descriptors that don't change what to buy. */

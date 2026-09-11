@@ -1,17 +1,14 @@
 /** Shared domain types, mirroring the Supabase schema in supabase/schema.sql. */
 
-export type PantryCategory = "ingredient" | "misc";
-
-export interface PantryItem {
-  id: string;
-  name: string;
-  category: PantryCategory;
-  have: boolean;
-}
-
 export interface Ingredient {
   name: string;
   qty: string;
+}
+
+export interface PrepStep {
+  text: string;
+  /** True for a step that has to happen the night before (e.g. soaking rajma or chole). */
+  nightBefore: boolean;
 }
 
 export interface Recipe {
@@ -21,7 +18,7 @@ export interface Recipe {
   servings: number;
   tags: string[];
   ingredients: Ingredient[];
-  prepSteps: string[];
+  prepSteps: PrepStep[];
   instructions: string;
 }
 
