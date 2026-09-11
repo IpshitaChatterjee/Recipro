@@ -16,10 +16,13 @@ create table if not exists recipes (
 
 create table if not exists mealplans (
   -- The Monday of the week, e.g. "2026-09-07".
-  week_id    text primary key,
+  week_id           text primary key,
   -- Record<Day, {recipeId, prepDone: boolean[]} | null> — see lib/types.ts.
-  days       jsonb not null default '{}',
-  updated_at timestamptz not null default now()
+  days              jsonb not null default '{}',
+  -- Normalized ingredient names checked off this week's shopping list —
+  -- string[], see lib/types.ts.
+  shopping_checked  jsonb not null default '[]',
+  updated_at        timestamptz not null default now()
 );
 
 -- Keep updated_at current on every write, so "last changed" is always available

@@ -2,12 +2,11 @@
 
 /**
  * The shopping list: every ingredient this week's planned meals need,
- * deduplicated by its plain grocery-item name. There's no stock tracking —
- * checking an item off just crosses it out for this viewing session (not
- * persisted, not shared across tabs/devices).
+ * deduplicated by its plain grocery-item name. Checked-off items are saved
+ * per week (`shoppingChecked`) and sync like everything else in the app.
  */
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { ChecklistRow } from "@/components/ChecklistRow";
 import { Card } from "@/components/ui/card";
 import { normalizeIngredientName } from "@/lib/ingredient-name";
@@ -15,8 +14,7 @@ import { useRecipro } from "@/lib/recipro-context";
 import { DAYS } from "@/lib/types";
 
 export function ShoppingList() {
-  const { days, findRecipe } = useRecipro();
-  const [checkedOff, setCheckedOff] = useState<Set<string>>(new Set());
+  const { days, findRecipe, shoppingChecked, toggleShoppingItem } = useRecipro();
 
   const { needed, anyPlanned } = useMemo(() => {
     const needed = new Map<string, string[]>();
@@ -40,20 +38,13 @@ export function ShoppingList() {
     return { needed, anyPlanned };
   }, [days, findRecipe]);
 
-  function toggle(name: string) {
-    setCheckedOff((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
-    });
-  }
+  const checkedSet = useMemo(() => new Set(shoppingChecked), [shoppingChecked]);
 
   // Checked-off items sink to the bottom, so what's still needed stays at
   // the top; each group otherwise keeps the order it was found in.
   const ordered = useMemo(
-    () => [...needed].sort(([a], [b]) => Number(checkedOff.has(a)) - Number(checkedOff.has(b))),
-    [needed, checkedOff]
+    () => [...needed].sort(([a], [b]) => Number(checkedSet.has(a)) - Number(checkedSet.has(b))),
+    [needed, checkedSet]
   );
 
   const total = needed.size;
@@ -81,8 +72,8 @@ export function ShoppingList() {
             {ordered.map(([name, wantedBy]) => (
               <div key={name} className="break-inside-avoid">
                 <ChecklistRow
-                  checked={checkedOff.has(name)}
-                  onChange={() => toggle(name)}
+                  checked={checkedSet.has(name)}
+                  onChange={() => toggleShoppingItem(name)}
                   label={name}
                   subText={`for ${wantedBy.join(", ")}`}
                   strike

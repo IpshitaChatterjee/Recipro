@@ -26,6 +26,7 @@ import {
   emptyDays,
   newAssignment,
   normalizeDays,
+  normalizeShoppingChecked,
   type Assignment,
   type Day,
   type Days,
@@ -41,6 +42,8 @@ interface ReciproState {
   selectedWeekId: string;
   days: Days;
   recipes: Recipe[];
+  /** Normalized ingredient names checked off this week's shopping list. */
+  shoppingChecked: string[];
 }
 
 interface ReciproActions {
@@ -49,6 +52,7 @@ interface ReciproActions {
   removeMeal: (day: Day, assignmentId: string) => void;
   moveMeal: (fromDay: Day, assignmentId: string, toDay: Day, toSlot: MealSlot, toIndex: number) => void;
   togglePrepStep: (day: Day, assignmentId: string, index: number) => void;
+  toggleShoppingItem: (name: string) => void;
   saveRecipe: (id: string | null, data: RecipeInput) => void;
   deleteRecipe: (id: string) => void;
   findRecipe: (id: string) => Recipe | undefined;
@@ -78,6 +82,7 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [selectedWeekId, setSelectedWeekId] = useState(THIS_WEEK_ID);
   const [days, setDays] = useState<Days>(emptyDays());
+  const [shoppingChecked, setShoppingChecked] = useState<string[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
 
   // Kept in a ref so the realtime mealplan callback (subscribed once, see
@@ -95,7 +100,7 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
     async (weekId: string) => {
       const { data, error: fetchError } = await supabase
         .from("mealplans")
-        .select("week_id, days")
+        .select("week_id, days, shopping_checked")
         .eq("week_id", weekId)
         .maybeSingle();
 
@@ -103,11 +108,17 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
       if (fetchError) return;
 
       if (data) {
-        setDays(mealPlanFromRow(data).days);
+        const plan = mealPlanFromRow(data);
+        setDays(plan.days);
+        setShoppingChecked(plan.shoppingChecked);
       } else {
         const fresh = emptyDays();
         setDays(fresh);
-        await supabase.from("mealplans").insert({ week_id: weekId, days: fresh }).then(logIfFailed("create this week's meal plan"));
+        setShoppingChecked([]);
+        await supabase
+          .from("mealplans")
+          .insert({ week_id: weekId, days: fresh, shopping_checked: [] })
+          .then(logIfFailed("create this week's meal plan"));
       }
     },
     [supabase]
@@ -147,10 +158,16 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
 
         supabase
           .channel("mealplans-changes")
-          .on("postgres_changes", { event: "*", schema: "public", table: "mealplans" }, (payload) => {
-            const row = payload.new as { week_id?: string; days?: unknown } | null;
-            if (row?.week_id === selectedWeekIdRef.current && row.days) setDays(normalizeDays(row.days));
-          })
+          .on(
+            "postgres_changes",
+            { event: "*", schema: "public", table: "mealplans" },
+            (payload) => {
+              const row = payload.new as { week_id?: string; days?: unknown; shopping_checked?: unknown } | null;
+              if (row?.week_id !== selectedWeekIdRef.current) return;
+              if (row.days) setDays(normalizeDays(row.days));
+              setShoppingChecked(normalizeShoppingChecked(row.shopping_checked));
+            }
+          )
           .subscribe()
       );
     }
@@ -185,6 +202,21 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
         .then(logIfFailed("save meal plan"));
     },
     [supabase]
+  );
+
+  const toggleShoppingItem = useCallback(
+    (name: string) => {
+      const next = shoppingChecked.includes(name)
+        ? shoppingChecked.filter((item) => item !== name)
+        : [...shoppingChecked, name];
+      setShoppingChecked(next);
+      supabase
+        .from("mealplans")
+        .update({ shopping_checked: next })
+        .eq("week_id", selectedWeekIdRef.current)
+        .then(logIfFailed("update shopping list"));
+    },
+    [shoppingChecked, supabase]
   );
 
   const addMeal = useCallback(
@@ -273,11 +305,13 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
     selectedWeekId,
     days,
     recipes,
+    shoppingChecked,
     selectWeek,
     addMeal,
     removeMeal,
     moveMeal,
     togglePrepStep,
+    toggleShoppingItem,
     saveRecipe,
     deleteRecipe,
     findRecipe,

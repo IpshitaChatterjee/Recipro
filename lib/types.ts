@@ -47,6 +47,8 @@ export interface MealPlan {
   /** The Monday of the week, e.g. "2026-09-07" — also the row's primary key. */
   weekId: string;
   days: Days;
+  /** Normalized ingredient names checked off this week's shopping list. */
+  shoppingChecked: string[];
 }
 
 export function emptyDays(): Days {
@@ -94,4 +96,8 @@ function normalizeAssignment(entry: unknown): Assignment | null {
 
 export function newAssignment(recipeId: string, prepStepCount: number, mealSlot: MealSlot): Assignment {
   return { id: genAssignmentId(), recipeId, mealSlot, prepDone: new Array(prepStepCount).fill(false) };
+}
+
+export function normalizeShoppingChecked(raw: unknown): string[] {
+  return Array.isArray(raw) ? raw.filter((item): item is string => typeof item === "string") : [];
 }

@@ -21,9 +21,12 @@ supabase/schema.sql   # tables, triggers, RLS policies
 supabase/seed.sql      # starter recipes and an example week (optional)
 ```
 
-Upgrading a project set up before the Pantry tab was removed? It's harmless to
-leave the old `pantry_items` table in place, but `supabase/migrate-drop-pantry.sql`
-deletes it if you'd rather clean it up.
+Upgrading an existing project? Run whichever of these apply:
+- `supabase/migrate-drop-pantry.sql` — drops the unused `pantry_items` table
+  from before the Pantry tab was removed (optional; harmless to leave it).
+- `supabase/migrate-add-shopping-checked.sql` — adds the column that lets
+  checked-off shopping list items persist (needed, or checking things off
+  won't survive a refresh).
 
 ### 2. Configure environment variables
 
@@ -111,12 +114,13 @@ Two tables, defined in `supabase/schema.sql`:
 | Table       | Purpose                                              |
 | ----------- | ----------------------------------------------------- |
 | `recipes`   | Name, cook time, servings, tags, ingredients, prep steps (each with a night-before flag), instructions |
-| `mealplans` | One row per week (keyed by that week's Monday, e.g. `2026-09-07`), holding the list of recipes assigned to each day (a day can hold any number of meals) and each one's prep checklist |
+| `mealplans` | One row per week (keyed by that week's Monday, e.g. `2026-09-07`), holding the list of recipes assigned to each day (a day can hold any number of meals), each one's prep checklist, and which shopping-list items are checked off |
 
 There's no separate pantry/stock table — the shopping list is computed
-directly from this week's planned meals' ingredients (deduplicated by plain
-grocery-item name, see `lib/ingredient-name.ts`) and isn't persisted; checking
-an item off just crosses it out for that viewing session.
+directly from this week's planned meals' ingredients, deduplicated by plain
+grocery-item name (see `lib/ingredient-name.ts`). Checking an item off is
+saved to that week's `mealplans` row (`shopping_checked`) and syncs like
+everything else.
 
 Recipro has no login — it's a single household's planner, and the browser
 talks to Supabase directly with the public anon key. Row Level Security is
