@@ -46,7 +46,7 @@ function AppShell() {
       <section hidden={tab !== "week"} className="flex flex-col gap-8">
         <div>
           <h2 className="mb-3 font-heading text-base font-medium text-foreground">This week&rsquo;s meals</h2>
-          <WeekView />
+          <WeekView onOpenRecipe={setDialogRecipe} />
         </div>
         <ShoppingList />
         <PrepList />

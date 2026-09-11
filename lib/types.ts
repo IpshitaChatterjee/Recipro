@@ -31,10 +31,14 @@ export type RecipeInput = Omit<Recipe, "id">;
 export const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 export type Day = (typeof DAYS)[number];
 
+export const MEAL_SLOTS = ["breakfast", "lunch", "dinner"] as const;
+export type MealSlot = (typeof MEAL_SLOTS)[number];
+
 export interface Assignment {
   /** Unique per assignment (not per recipe) — a day can have the same recipe twice. */
   id: string;
   recipeId: string;
+  mealSlot: MealSlot;
   /** One entry per prep step on the assigned recipe, true once checked off. */
   prepDone: boolean[];
 }
@@ -79,15 +83,18 @@ export function normalizeDays(raw: unknown): Days {
 
 function normalizeAssignment(entry: unknown): Assignment | null {
   if (!entry || typeof entry !== "object") return null;
-  const { id, recipeId, prepDone } = entry as Partial<Assignment>;
+  const { id, recipeId, mealSlot, prepDone } = entry as Partial<Assignment>;
   if (typeof recipeId !== "string") return null;
   return {
     id: typeof id === "string" ? id : genAssignmentId(),
     recipeId,
+    // Assignments saved before meal slots existed default to dinner — this
+    // app started as dinner-only Instant Pot planning.
+    mealSlot: MEAL_SLOTS.includes(mealSlot as MealSlot) ? (mealSlot as MealSlot) : "dinner",
     prepDone: Array.isArray(prepDone) ? prepDone.map(Boolean) : [],
   };
 }
 
-export function newAssignment(recipeId: string, prepStepCount: number): Assignment {
-  return { id: genAssignmentId(), recipeId, prepDone: new Array(prepStepCount).fill(false) };
+export function newAssignment(recipeId: string, prepStepCount: number, mealSlot: MealSlot): Assignment {
+  return { id: genAssignmentId(), recipeId, mealSlot, prepDone: new Array(prepStepCount).fill(false) };
 }

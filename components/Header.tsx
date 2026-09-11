@@ -3,7 +3,6 @@
 import { useMemo } from "react";
 import { LogoMark } from "@/components/Icon";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
 import { buildWeekOptions } from "@/lib/dates";
 import { useRecipro } from "@/lib/recipro-context";
 
@@ -23,15 +22,12 @@ export function Header() {
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <Label htmlFor="weekSelect" className="text-muted-foreground">
-          Week
-        </Label>
         <Select
           items={options.map((o) => ({ value: o.id, label: o.label }))}
           value={selectedWeekId}
           onValueChange={(value) => value && selectWeek(value)}
         >
-          <SelectTrigger id="weekSelect" className="w-56">
+          <SelectTrigger id="weekSelect" aria-label="Select week" className="w-56">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

@@ -26,8 +26,10 @@ import {
   emptyDays,
   newAssignment,
   normalizeDays,
+  type Assignment,
   type Day,
   type Days,
+  type MealSlot,
   type PantryCategory,
   type Recipe,
   type RecipeInput,
@@ -45,9 +47,9 @@ interface ReciproState {
 
 interface ReciproActions {
   selectWeek: (weekId: string) => void;
-  addMeal: (day: Day, recipeId: string) => void;
+  addMeal: (day: Day, recipeId: string, mealSlot: MealSlot) => void;
   removeMeal: (day: Day, assignmentId: string) => void;
-  moveMeal: (fromDay: Day, assignmentId: string, toDay: Day, toIndex: number) => void;
+  moveMeal: (fromDay: Day, assignmentId: string, toDay: Day, toSlot: MealSlot, toIndex: number) => void;
   togglePrepStep: (day: Day, assignmentId: string, index: number) => void;
   togglePantryHave: (id: string) => void;
   addPantryItem: (category: PantryCategory, name: string, have?: boolean) => void;
@@ -197,9 +199,9 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
   );
 
   const addMeal = useCallback(
-    (day: Day, recipeId: string) => {
+    (day: Day, recipeId: string, mealSlot: MealSlot) => {
       const recipe = recipes.find((r) => r.id === recipeId);
-      const assignment = newAssignment(recipeId, recipe?.prepSteps.length ?? 0);
+      const assignment = newAssignment(recipeId, recipe?.prepSteps.length ?? 0, mealSlot);
       saveDays({ ...days, [day]: [...days[day], assignment] });
     },
     [days, recipes, saveDays]
@@ -213,22 +215,27 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
   );
 
   /**
-   * Move (or reorder) a meal. `toIndex` is clamped, so passing something
-   * like `Infinity` is a convenient way to say "drop at the end".
+   * Move (or reorder) a meal, possibly into a different meal slot. `toIndex`
+   * is clamped and only orders items within the destination slot — passing
+   * something like `Infinity` is a convenient way to say "drop at the end".
    */
   const moveMeal = useCallback(
-    (fromDay: Day, assignmentId: string, toDay: Day, toIndex: number) => {
-      const assignment = days[fromDay].find((a) => a.id === assignmentId);
-      if (!assignment) return;
+    (fromDay: Day, assignmentId: string, toDay: Day, toSlot: MealSlot, toIndex: number) => {
+      const original = days[fromDay].find((a) => a.id === assignmentId);
+      if (!original) return;
+      const moved: Assignment = { ...original, mealSlot: toSlot };
 
-      const fromList = days[fromDay].filter((a) => a.id !== assignmentId);
-      const toListBase = fromDay === toDay ? fromList : days[toDay];
-      const clampedIndex = Math.max(0, Math.min(toIndex, toListBase.length));
-      const toList = [...toListBase.slice(0, clampedIndex), assignment, ...toListBase.slice(clampedIndex)];
+      const fromRest = days[fromDay].filter((a) => a.id !== assignmentId);
+      const toBase = fromDay === toDay ? fromRest : days[toDay];
+
+      const destSlot = toBase.filter((a) => a.mealSlot === toSlot);
+      const destOther = toBase.filter((a) => a.mealSlot !== toSlot);
+      const clampedIndex = Math.max(0, Math.min(toIndex, destSlot.length));
+      const newDestSlot = [...destSlot.slice(0, clampedIndex), moved, ...destSlot.slice(clampedIndex)];
 
       const next: Days = { ...days };
-      next[fromDay] = fromList;
-      next[toDay] = toList;
+      next[fromDay] = fromRest;
+      next[toDay] = [...destOther, ...newDestSlot];
       saveDays(next);
     },
     [days, saveDays]

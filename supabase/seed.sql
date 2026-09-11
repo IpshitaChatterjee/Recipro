@@ -40,7 +40,8 @@ on conflict (id) do update set
   instructions = excluded.instructions;
 
 -- `days` holds an array of assignments per day (usually 0 or 1, but a day can
--- have several meals) — see lib/types.ts's Days/Assignment types.
+-- have several meals across breakfast/lunch/dinner) — see lib/types.ts's
+-- Days/Assignment types.
 insert into mealplans (week_id, days) values
-  ('2026-09-07', '{"Mon":[{"id":"a-seed0001","recipeId":"dal-tadka","prepDone":[false,false,false]}],"Tue":[],"Wed":[{"id":"a-seed0002","recipeId":"chana-masala","prepDone":[false,false,false]}],"Thu":[],"Fri":[{"id":"a-seed0003","recipeId":"rajma","prepDone":[false,false,false]}],"Sat":[{"id":"a-seed0004","recipeId":"jeera-rice","prepDone":[false]}],"Sun":[]}'::jsonb)
+  ('2026-09-07', '{"Mon":[{"id":"a-seed0001","recipeId":"dal-tadka","mealSlot":"dinner","prepDone":[false,false,false]}],"Tue":[],"Wed":[{"id":"a-seed0002","recipeId":"chana-masala","mealSlot":"dinner","prepDone":[false,false,false]}],"Thu":[],"Fri":[{"id":"a-seed0003","recipeId":"rajma","mealSlot":"dinner","prepDone":[false,false,false]}],"Sat":[{"id":"a-seed0004","recipeId":"jeera-rice","mealSlot":"lunch","prepDone":[false]}],"Sun":[]}'::jsonb)
 on conflict (week_id) do update set days = excluded.days;

@@ -1,12 +1,14 @@
 "use client";
 
 /**
- * A Kanban-style board for the week: one column per day, each holding a
- * stack of recipe cards. Columns scroll horizontally on narrow screens
- * rather than reflowing, so every day stays a fixed, easy-to-scan width.
- * Cards can be dragged between (and reordered within) days. Days that have
- * already passed are greyed out and read-only, and the board auto-scrolls
- * to today's column when it's part of the selected week.
+ * A Kanban-style board for the week: one column per day, each split into
+ * three meal-slot sections (breakfast/lunch/dinner), each holding a stack of
+ * recipe cards. Columns scroll horizontally on narrow screens rather than
+ * reflowing, so every day stays a fixed, easy-to-scan width. Cards can be
+ * dragged between (and reordered within) slots and days, and clicking one
+ * opens that recipe in the same edit drawer as the Recipes tab. Days that
+ * have already passed are greyed out and read-only, and the board
+ * auto-scrolls to today's column when it's part of the selected week.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -31,39 +33,55 @@ import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useRecipro } from "@/lib/recipro-context";
 import { addDays, isPastDate, mondayFromWeekId, startOfToday } from "@/lib/dates";
-import { DAYS, type Assignment, type Day, type Recipe } from "@/lib/types";
+import { DAYS, MEAL_SLOTS, type Assignment, type Day, type MealSlot, type Recipe } from "@/lib/types";
 
-/** Droppable ids for a day column look like `day:Mon`, distinct from any assignment id. */
-const dayDroppableId = (day: Day) => `day:${day}`;
-const isDayDroppableId = (id: string): id is `day:${Day}` => id.startsWith("day:");
+const MEAL_SLOT_LABELS: Record<MealSlot, string> = {
+  breakfast: "Breakfast",
+  lunch: "Lunch",
+  dinner: "Dinner",
+};
+
+/** Droppable ids for a slot look like `day:Mon:lunch`, distinct from any assignment id. */
+const slotDroppableId = (day: Day, slot: MealSlot) => `day:${day}:${slot}`;
+function parseSlotDroppableId(id: string): { day: Day; slot: MealSlot } | null {
+  const [prefix, day, slot] = id.split(":");
+  if (prefix !== "day") return null;
+  return { day: day as Day, slot: slot as MealSlot };
+}
 
 function MealCardBody({ recipe }: { recipe: Recipe }) {
   return (
-    <>
+    <div className="flex flex-col gap-1.5">
       <div className="font-heading text-sm font-medium text-foreground">{recipe.name}</div>
       <Badge variant="outline" className="w-fit">
         {recipe.cookTimeMin} min
       </Badge>
-    </>
+    </div>
   );
 }
 
 function MealCard({
   day,
+  slot,
   assignment,
   recipe,
   isPast,
+  onOpen,
 }: {
   day: Day;
+  slot: MealSlot;
   assignment: Assignment;
   recipe: Recipe;
   isPast: boolean;
+  onOpen: (recipe: Recipe) => void;
 }) {
   const { removeMeal } = useRecipro();
+  // Not `disabled: isPast` here — that would mark the whole card
+  // aria-disabled, blocking the click-to-view we still want on past meals.
+  // Withholding `listeners` below is what actually prevents dragging it.
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: assignment.id,
-    data: { day },
-    disabled: isPast,
+    data: { day, slot },
   });
 
   return (
@@ -71,8 +89,15 @@ function MealCard({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       size="sm"
-      className={`gap-1.5 px-3 ${isPast ? "" : "touch-none"} ${isDragging ? "opacity-40" : ""}`}
-      {...(isPast ? {} : attributes)}
+      aria-label={`Open ${recipe.name}`}
+      className={`cursor-pointer gap-1.5 px-3 ${isPast ? "" : "touch-none"} ${isDragging ? "opacity-40" : ""}`}
+      onClick={() => onOpen(recipe)}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        onOpen(recipe);
+      }}
+      {...attributes}
       {...(isPast ? {} : listeners)}
     >
       <div className="flex items-start justify-between gap-2">
@@ -83,10 +108,14 @@ function MealCard({
           className="-mt-1 -mr-1 shrink-0"
           aria-label={`Remove ${recipe.name} from ${day}`}
           disabled={isPast}
-          // Dragging is bound to the whole card; stop the click reaching the
-          // drag handlers so removing doesn't also start (or fight) a drag.
+          // Dragging and opening are bound to the whole card; stop the click
+          // (and the pointerdown that would start a drag) from reaching them
+          // so removing doesn't also open the recipe or fight a drag.
           onPointerDown={(e) => e.stopPropagation()}
-          onClick={() => removeMeal(day, assignment.id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            removeMeal(day, assignment.id);
+          }}
         >
           <X />
         </Button>
@@ -95,41 +124,47 @@ function MealCard({
   );
 }
 
-interface DayColumnProps {
+function MealSlotSection({
+  day,
+  slot,
+  isPast,
+  onOpenRecipe,
+}: {
   day: Day;
-  date: Date;
-  isToday: boolean;
+  slot: MealSlot;
   isPast: boolean;
-  registerNode: (day: Day, node: HTMLDivElement | null) => void;
-}
-
-function DayColumn({ day, date, isToday, isPast, registerNode }: DayColumnProps) {
+  onOpenRecipe: (recipe: Recipe) => void;
+}) {
   const { days, recipes, findRecipe, addMeal } = useRecipro();
-  const assignments = days[day];
-  const { setNodeRef, isOver } = useDroppable({ id: dayDroppableId(day), disabled: isPast });
+  const assignments = days[day].filter((a) => a.mealSlot === slot);
+  const { setNodeRef, isOver } = useDroppable({ id: slotDroppableId(day, slot), disabled: isPast });
 
   return (
     <div
-      ref={(node) => {
-        setNodeRef(node);
-        registerNode(day, node);
-      }}
-      className={`flex w-64 shrink-0 flex-col gap-3 rounded-2xl p-3 transition-colors ${
-        isPast ? "bg-muted/25 opacity-60" : isOver ? "bg-primary/10 ring-2 ring-primary/30" : "bg-muted/50"
-      } ${isToday && !isPast ? "ring-1 ring-primary/40" : ""}`}
+      ref={setNodeRef}
+      className={`flex flex-col gap-2 rounded-xl p-1.5 transition-colors ${
+        isOver && !isPast ? "bg-primary/10 ring-1 ring-primary/30" : ""
+      }`}
     >
-      <div className="flex items-baseline gap-1 px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-        <span>{date.getDate()}</span>
-        <span>{day}</span>
+      <div className="px-1 text-[10px] font-semibold tracking-wide text-muted-foreground/80 uppercase">
+        {MEAL_SLOT_LABELS[slot]}
       </div>
 
       <SortableContext items={assignments.map((a) => a.id)} strategy={verticalListSortingStrategy}>
-        {/* min-h-60 keeps columns a consistent height — room for ~3 cards even when a day has fewer. */}
+        {/* min-h-60 keeps each slot a consistent height — room for ~3 cards even when it has fewer. */}
         <div className="flex min-h-60 flex-col gap-2">
           {assignments.map((assignment) => {
             const recipe = findRecipe(assignment.recipeId);
             return recipe ? (
-              <MealCard key={assignment.id} day={day} assignment={assignment} recipe={recipe} isPast={isPast} />
+              <MealCard
+                key={assignment.id}
+                day={day}
+                slot={slot}
+                assignment={assignment}
+                recipe={recipe}
+                isPast={isPast}
+                onOpen={onOpenRecipe}
+              />
             ) : null;
           })}
         </div>
@@ -139,9 +174,9 @@ function DayColumn({ day, date, isToday, isPast, registerNode }: DayColumnProps)
         items={recipes.map((r) => ({ value: r.id, label: r.name }))}
         value=""
         disabled={isPast}
-        onValueChange={(recipeId) => recipeId && addMeal(day, recipeId)}
+        onValueChange={(recipeId) => recipeId && addMeal(day, recipeId, slot)}
       >
-        <SelectTrigger aria-label={`Add a meal for ${day}`} className="w-full bg-background">
+        <SelectTrigger aria-label={`Add a ${slot} for ${day}`} className="w-full bg-background">
           <SelectValue placeholder="Add a meal…" />
         </SelectTrigger>
         <SelectContent>
@@ -156,7 +191,36 @@ function DayColumn({ day, date, isToday, isPast, registerNode }: DayColumnProps)
   );
 }
 
-export function WeekView() {
+interface DayColumnProps {
+  day: Day;
+  date: Date;
+  isToday: boolean;
+  isPast: boolean;
+  registerNode: (day: Day, node: HTMLDivElement | null) => void;
+  onOpenRecipe: (recipe: Recipe) => void;
+}
+
+function DayColumn({ day, date, isToday, isPast, registerNode, onOpenRecipe }: DayColumnProps) {
+  return (
+    <div
+      ref={(node) => registerNode(day, node)}
+      className={`flex w-64 shrink-0 flex-col gap-4 rounded-2xl p-3 transition-colors ${
+        isPast ? "bg-muted/25 opacity-60" : "bg-muted/50"
+      } ${isToday && !isPast ? "ring-1 ring-primary/40" : ""}`}
+    >
+      <div className="flex items-baseline gap-1 px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+        <span>{date.getDate()}</span>
+        <span>{day}</span>
+      </div>
+
+      {MEAL_SLOTS.map((slot) => (
+        <MealSlotSection key={slot} day={day} slot={slot} isPast={isPast} onOpenRecipe={onOpenRecipe} />
+      ))}
+    </div>
+  );
+}
+
+export function WeekView({ onOpenRecipe }: { onOpenRecipe: (recipe: Recipe) => void }) {
   const { days, findRecipe, moveMeal, selectedWeekId } = useRecipro();
   const [activeId, setActiveId] = useState<string | null>(null);
   const columnNodes = useRef<Partial<Record<Day, HTMLDivElement>>>({});
@@ -215,21 +279,30 @@ export function WeekView() {
 
     const activeId = String(active.id);
     const overId = String(over.id);
-    const fromDay = active.data.current?.day as Day | undefined;
-    if (!fromDay || pastDays[fromDay]) return;
+    const from = active.data.current as { day?: Day; slot?: MealSlot } | undefined;
+    const fromDay = from?.day;
+    const fromSlot = from?.slot;
+    if (!fromDay || !fromSlot || pastDays[fromDay]) return;
 
-    if (isDayDroppableId(overId)) {
-      const toDay = overId.slice(4) as Day;
-      if (pastDays[toDay]) return;
-      moveMeal(fromDay, activeId, toDay, Infinity);
+    const overSlot = parseSlotDroppableId(overId);
+    if (overSlot) {
+      // Dropped on empty space within a slot section.
+      if (pastDays[overSlot.day]) return;
+      moveMeal(fromDay, activeId, overSlot.day, overSlot.slot, Infinity);
       return;
     }
 
-    const toDay = (over.data.current?.day as Day | undefined) ?? fromDay;
+    // Dropped on another card — resolve its day/slot from its sortable data.
+    const to = over.data.current as { day?: Day; slot?: MealSlot } | undefined;
+    const toDay = to?.day ?? fromDay;
+    const toSlot = to?.slot ?? fromSlot;
     if (pastDays[toDay]) return;
-    const toIndex = days[toDay].findIndex((a) => a.id === overId);
-    if (fromDay === toDay && toIndex === days[fromDay].findIndex((a) => a.id === activeId)) return;
-    moveMeal(fromDay, activeId, toDay, toIndex === -1 ? Infinity : toIndex);
+
+    const toIndex = days[toDay].filter((a) => a.mealSlot === toSlot).findIndex((a) => a.id === overId);
+    if (fromDay === toDay && fromSlot === toSlot && toIndex === days[fromDay].filter((a) => a.mealSlot === fromSlot).findIndex((a) => a.id === activeId)) {
+      return;
+    }
+    moveMeal(fromDay, activeId, toDay, toSlot, toIndex === -1 ? Infinity : toIndex);
   }
 
   const active = activeId ? locate(activeId) : null;
@@ -257,6 +330,7 @@ export function WeekView() {
             isToday={day === todayDay}
             isPast={pastDays[day]}
             registerNode={registerNode}
+            onOpenRecipe={onOpenRecipe}
           />
         ))}
       </div>

@@ -6,7 +6,7 @@ import { Tabs as TabsRoot, TabsList, TabsTrigger } from "@/components/ui/tabs";
 export type TabKey = "week" | "recipes" | "pantry";
 
 const TABS: { key: TabKey; label: string; Icon: typeof LayoutGrid }[] = [
-  { key: "week", label: "This week", Icon: LayoutGrid },
+  { key: "week", label: "Meal plan", Icon: LayoutGrid },
   { key: "recipes", label: "Recipes", Icon: BookOpen },
   { key: "pantry", label: "Pantry", Icon: ShoppingBasket },
 ];
