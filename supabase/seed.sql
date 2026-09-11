@@ -1,0 +1,44 @@
+-- Seed data for local/dev Supabase databases.
+-- Run after schema.sql. Safe to re-run: upserts on primary key.
+
+insert into pantry_items (id, name, category, have) values
+  ('toor-dal', 'Toor dal', 'ingredient', true),
+  ('basmati-rice', 'Basmati rice', 'ingredient', true),
+  ('dried-chickpeas', 'Dried chickpeas', 'ingredient', false),
+  ('dried-kidney-beans', 'Dried kidney beans', 'ingredient', false),
+  ('onion', 'Onion', 'ingredient', true),
+  ('tomato', 'Tomato', 'ingredient', false),
+  ('ginger-garlic-paste', 'Ginger-garlic paste', 'ingredient', true),
+  ('cumin-seeds', 'Cumin seeds', 'ingredient', true),
+  ('turmeric', 'Turmeric', 'ingredient', true),
+  ('red-chili-powder', 'Red chili powder', 'ingredient', true),
+  ('coriander-powder', 'Coriander powder', 'ingredient', true),
+  ('garam-masala', 'Garam masala', 'ingredient', true),
+  ('chana-masala-mix', 'Chana masala spice mix', 'ingredient', false),
+  ('ghee', 'Ghee', 'ingredient', true),
+  ('oil', 'Oil', 'ingredient', true),
+  ('cilantro', 'Cilantro', 'ingredient', false),
+  ('lemon', 'Lemon', 'ingredient', false),
+  ('dried-red-chilies', 'Dried red chilies', 'ingredient', true),
+  ('whole-spices', 'Whole spices (bay leaf, cloves, cardamom)', 'ingredient', true),
+  ('salt', 'Salt', 'ingredient', true),
+  ('napkins', 'Napkins', 'misc', false),
+  ('dish-soap', 'Dish soap', 'misc', true),
+  ('trash-bags', 'Trash bags', 'misc', true),
+  ('paper-towels', 'Paper towels', 'misc', false),
+  ('aluminum-foil', 'Aluminum foil', 'misc', true)
+on conflict (id) do update set name = excluded.name, category = excluded.category, have = excluded.have;
+
+insert into recipes (id, name, cook_time_min, servings, tags, ingredients, prep_steps, instructions) values
+  ('dal-tadka', 'Dal Tadka', 25, 4, array['dal', 'vegetarian', 'weeknight'], '[{"name":"Toor dal","qty":"1 cup"},{"name":"Turmeric","qty":"1/2 tsp"},{"name":"Salt","qty":"to taste"},{"name":"Onion","qty":"1, chopped"},{"name":"Tomato","qty":"1, chopped"},{"name":"Ginger-garlic paste","qty":"1 tbsp"},{"name":"Cumin seeds","qty":"1 tsp"},{"name":"Ghee","qty":"2 tbsp"},{"name":"Dried red chilies","qty":"2"},{"name":"Garam masala","qty":"1/2 tsp"},{"name":"Cilantro","qty":"for garnish"}]'::jsonb, '["Soak toor dal in water for 30 minutes (or overnight in the fridge)","Chop onion and tomato, mince ginger-garlic ahead","Measure turmeric and garam masala into a small bowl"]'::jsonb, 'Rinse the soaked dal and add it to the Instant Pot with 3 cups water, turmeric, and salt. Pressure cook on High for 8 minutes, then let it natural release for 10 minutes. Meanwhile heat ghee in a small pan, add cumin seeds and dried chilies, then onion, ginger-garlic, and tomato; cook until soft and fragrant. Stir the tempering into the dal, add garam masala, and finish with cilantro.'),
+  ('chana-masala', 'Chana Masala', 45, 4, array['legumes', 'vegan', 'meal-prep'], '[{"name":"Dried chickpeas","qty":"1.5 cups, soaked"},{"name":"Onion","qty":"1 large, chopped"},{"name":"Tomato","qty":"2, pureed"},{"name":"Ginger-garlic paste","qty":"1 tbsp"},{"name":"Cumin seeds","qty":"1 tsp"},{"name":"Coriander powder","qty":"1 tbsp"},{"name":"Red chili powder","qty":"1 tsp"},{"name":"Turmeric","qty":"1/2 tsp"},{"name":"Chana masala spice mix","qty":"1.5 tbsp"},{"name":"Oil","qty":"2 tbsp"},{"name":"Salt","qty":"to taste"},{"name":"Cilantro","qty":"for garnish"},{"name":"Lemon","qty":"for garnish"}]'::jsonb, '["Soak chickpeas in water overnight (8+ hours)","Chop the onion and puree the tomatoes ahead","Portion the spice mix into a small bowl"]'::jsonb, 'Set to Sauté, heat oil, and cook cumin seeds, onion, and ginger-garlic until golden. Add tomato puree and spices, cooking 3-4 minutes. Add drained chickpeas and 2 cups water. Pressure cook on High for 20 minutes, natural release 15 minutes. Mash a few chickpeas to thicken the sauce, then finish with cilantro and a squeeze of lemon.'),
+  ('jeera-rice', 'Jeera Rice', 20, 4, array['rice', 'side', 'quick'], '[{"name":"Basmati rice","qty":"1.5 cups"},{"name":"Cumin seeds","qty":"1.5 tsp"},{"name":"Ghee","qty":"2 tbsp"},{"name":"Whole spices (bay leaf, cloves, cardamom)","qty":"1 set"},{"name":"Salt","qty":"to taste"}]'::jsonb, '["Rinse and soak basmati rice for 20 minutes, then drain"]'::jsonb, 'Set to Sauté, melt ghee, and toast cumin seeds with the whole spices until fragrant. Add the drained rice and stir for a minute to coat. Add 2 cups water and salt. Pressure cook on High for 4 minutes, natural release 8 minutes, then fluff with a fork.'),
+  ('rajma', 'Rajma (Kidney Bean Curry)', 50, 4, array['legumes', 'vegan', 'freezer-friendly'], '[{"name":"Dried kidney beans","qty":"1.5 cups, soaked"},{"name":"Onion","qty":"1, chopped"},{"name":"Tomato","qty":"2, pureed"},{"name":"Ginger-garlic paste","qty":"1 tbsp"},{"name":"Cumin seeds","qty":"1 tsp"},{"name":"Coriander powder","qty":"1 tbsp"},{"name":"Red chili powder","qty":"1 tsp"},{"name":"Garam masala","qty":"1 tsp"},{"name":"Oil","qty":"2 tbsp"},{"name":"Salt","qty":"to taste"},{"name":"Cilantro","qty":"for garnish"}]'::jsonb, '["Soak rajma in water overnight (8+ hours)","Chop the onion and puree the tomatoes ahead","Mince ginger and garlic ahead"]'::jsonb, 'Sauté cumin seeds, onion, and ginger-garlic until golden. Add tomato puree and spices, cooking until the oil separates. Add drained rajma and 2.5 cups water. Pressure cook on High for 25 minutes, natural release 15 minutes. Mash slightly to thicken, then finish with garam masala and cilantro.')
+on conflict (id) do update set
+  name = excluded.name, cook_time_min = excluded.cook_time_min, servings = excluded.servings,
+  tags = excluded.tags, ingredients = excluded.ingredients, prep_steps = excluded.prep_steps,
+  instructions = excluded.instructions;
+
+insert into mealplans (week_id, days) values
+  ('2026-09-07', '{"Mon":{"recipeId":"dal-tadka","prepDone":[false,false,false]},"Tue":null,"Wed":{"recipeId":"chana-masala","prepDone":[false,false,false]},"Thu":null,"Fri":{"recipeId":"rajma","prepDone":[false,false,false]},"Sat":{"recipeId":"jeera-rice","prepDone":[false]},"Sun":null}'::jsonb)
+on conflict (week_id) do update set days = excluded.days;

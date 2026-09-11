@@ -1,64 +1,130 @@
 # Recipro
 
-Weekly Instant Pot meal planning — plan a week of meals, see what your pantry is
-missing, and work through prep-ahead steps.
+Weekly Instant Pot meal planning — plan a week of meals, see what your pantry
+is missing, and work through prep-ahead steps.
 
-## Running locally
+Built with [Next.js](https://nextjs.org) (App Router, TypeScript), styled with
+[Tailwind CSS](https://tailwindcss.com) and [shadcn/ui](https://ui.shadcn.com),
+and persisted to [Supabase](https://supabase.com) (Postgres + Realtime).
 
-The app uses native ES modules, which browsers refuse to load over `file://`.
-Serve the directory over HTTP instead:
+## Setup
+
+### 1. Create a Supabase project
+
+Create a project at [supabase.com](https://supabase.com), then run the schema
+against it (SQL Editor, or `supabase db push` if you use the CLI):
 
 ```bash
-python3 -m http.server 8000
-# then open http://localhost:8000
+# in the Supabase SQL Editor, run in order:
+supabase/schema.sql   # tables, triggers, RLS policies
+supabase/seed.sql      # starter pantry, recipes, and an example week (optional)
 ```
+
+### 2. Configure environment variables
+
+```bash
+cp .env.local.example .env.local
+```
+
+Fill in `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` from your
+project's **Settings → API** page. Both are safe to expose to the browser —
+the app talks to Supabase directly from the client, and the anon key's access
+is constrained by the RLS policies in `supabase/schema.sql`, not by secrecy.
+
+### 3. Run
+
+```bash
+npm install
+npm run dev
+# open http://localhost:3000
+```
+
+`npm run build` produces a production build; `npm run lint` runs ESLint.
 
 ## Project structure
 
 ```
-index.html                  Markup only — no inline CSS or JS
-assets/css/styles.css       Design tokens, layout, components
-assets/js/
-  main.js                   Entry point: wires views to the store
-  lib/dom.js                el(), clear(), icons, styled checkbox
-  lib/dates.js              Week ids, week ranges, the DAYS constant
-  data/seed.js              First-run pantry, recipes and example week
-  data/db.js                Persistence — the only module that touches the database
-  data/store.js             All application state; the only module that mutates it
-  ui/tabs.js                ARIA tablist behaviour
-  ui/week-picker.js         Header week <select>
-  ui/week-view.js           The seven day cards
-  ui/shopping-list.js       Missing ingredients + household items
-  ui/prep-list.js           Prep-ahead checklist
-  ui/recipes-view.js        Recipe cards grid
-  ui/pantry-view.js         Stock lists and add forms
-  ui/recipe-dialog.js       Add/edit recipe dialog
+app/
+  layout.tsx              Root layout: fonts, metadata, imports globals.css
+  page.tsx                Renders <ReciproApp />
+  globals.css             Tailwind + shadcn design tokens (light/dark)
+
+components/
+  ui/                      shadcn/ui primitives (button, card, dialog, sheet,
+                            select, checkbox, tabs, alert-dialog, …) — owned
+                            source, not a dependency. Regenerate/extend with
+                            `npx shadcn@latest add <component>`.
+  ReciproApp.tsx           Top-level shell: tabs, panels, the recipe editor
+  Header.tsx               Brand + week picker
+  Tabs.tsx                 This week / Recipes / Pantry tablist
+  WeekView.tsx             The seven day cards
+  ShoppingList.tsx         Missing ingredients + household items
+  PrepList.tsx             Prep-ahead checklist
+  RecipesView.tsx          Recipe cards grid
+  PantryView.tsx           Stock lists and add forms
+  RecipeDialog.tsx         Add/edit recipe form, in a slide-out Sheet
+  PantryCheckbox.tsx       Checklist row (checkbox + label + optional strike)
+
+lib/
+  types.ts                 Shared domain types (PantryItem, Recipe, MealPlan, …)
+  dates.ts                 Week ids, week ranges, the DAYS constant
+  utils.ts                 shadcn's `cn()` class-merging helper
+  recipro-context.tsx      All application state and the only module that
+                            talks to Supabase — see "Data flow" below
+  supabase/
+    client.ts              Browser Supabase client
+    rows.ts                snake_case row ↔ camelCase domain type mapping
+
+supabase/
+  schema.sql                Tables, triggers, RLS policies, realtime config
+  seed.sql                   Starter pantry, recipes, and an example week
+
+components.json             shadcn/ui config (style, aliases, base color)
+.env.local.example          Required environment variables
 ```
 
 ### Data flow
 
-Dependencies run one way — `ui/* → data/store.js → data/db.js` — so there are no
-import cycles.
+`ReciproProvider` (in `lib/recipro-context.tsx`) owns all state — pantry,
+recipes, and the selected week's meal plan — behind a `useRecipro()` hook.
+Views never call Supabase directly:
 
-1. A view calls an action on the store (`assignRecipe`, `togglePantryHave`, …).
-2. The store updates state, notifies subscribers, and writes to the database.
-3. `main.js` re-renders every view on each notification.
-4. Database snapshots flow back through the store the same way, so changes made
-   in another tab or by another person appear automatically.
+1. A component calls an action from `useRecipro()` (`assignRecipe`,
+   `togglePantryHave`, `saveRecipe`, …).
+2. The action updates React state immediately (so the UI feels instant) and
+   writes to Supabase in the background.
+3. Supabase Realtime subscriptions (set up once, on mount) push any change —
+   from this tab, another tab, or another device — back into the same state,
+   so everything stays in sync automatically.
 
 ### Persistence
 
-Data lives in the `window.claude` artifact runtime's database capability
-(collections: `pantry`, `recipes`, `mealplans`). Every write is fire-and-forget;
-the live snapshot listeners reconcile any failure. When that capability is not
-available the app still runs, backed by the in-memory seed data from
-`data/seed.js`.
+Three tables, defined in `supabase/schema.sql`:
 
-Meal plans are keyed by week id — the date of that week's Monday, e.g.
-`2026-09-07`.
+| Table          | Purpose                                              |
+| -------------- | ----------------------------------------------------- |
+| `pantry_items` | Ingredients and household items, and whether in stock |
+| `recipes`      | Name, cook time, servings, tags, ingredients, prep steps, instructions |
+| `mealplans`    | One row per week (keyed by that week's Monday, e.g. `2026-09-07`), holding which recipe is assigned to each day and its prep checklist |
 
-## Note on artifact publishing
+Recipro has no login — it's a single household's planner, and the browser
+talks to Supabase directly with the public anon key. Row Level Security is
+enabled on all three tables with policies that grant the anon role full
+access (see the comment in `schema.sql`). That means anyone with the project
+URL and anon key can read and write this data, which is an acceptable
+tradeoff for a personal app — but if you ever add multiple households, swap
+those policies for per-user ones keyed on `auth.uid()` before that ships.
 
-`recipro.html` was a single self-contained file, which is what publishing as a
-Claude Artifact requires. The split version here needs its sibling files, so to
-publish it you would have to inline the CSS and JS back into one file first.
+## Styling
+
+The design system is [shadcn/ui](https://ui.shadcn.com) on Tailwind CSS v4,
+configured via `components.json`. Components under `components/ui/` are
+owned source, not a package dependency — edit them directly, or add more
+with `npx shadcn@latest add <component>`.
+
+## Note on the original artifact
+
+This project began as a single-file Claude Artifact (`recipro.html`) that
+persisted through `window.claude.use("db")`. It's been rebuilt from scratch
+as a standalone Next.js + Supabase app, so it can run and be deployed
+anywhere — that Artifact-only database API no longer applies.
