@@ -37,7 +37,7 @@ function AppShell() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 pb-16 sm:px-6">
+    <div className="w-full px-4 pb-16 sm:px-6 lg:px-10">
       <Header />
       <div className="mb-6">
         <Tabs active={tab} onChange={setTab} />

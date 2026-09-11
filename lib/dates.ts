@@ -26,6 +26,23 @@ export function weekIdOf(monday: Date): string {
   return `${monday.getFullYear()}-${pad2(monday.getMonth() + 1)}-${pad2(monday.getDate())}`;
 }
 
+/** Parse a week id (e.g. "2026-09-07") back into its Monday. */
+export function mondayFromWeekId(weekId: string): Date {
+  const [year, month, day] = weekId.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+/** Midnight at the start of today, for date-only (no time-of-day) comparisons. */
+export function startOfToday(): Date {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+}
+
+/** True if `date` is strictly before today — today itself is not "past". */
+export function isPastDate(date: Date): boolean {
+  return date.getTime() < startOfToday().getTime();
+}
+
 const fmtShort = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
 export function weekRangeLabel(monday: Date): string {

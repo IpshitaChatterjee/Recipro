@@ -47,6 +47,7 @@ interface ReciproActions {
   selectWeek: (weekId: string) => void;
   addMeal: (day: Day, recipeId: string) => void;
   removeMeal: (day: Day, assignmentId: string) => void;
+  moveMeal: (fromDay: Day, assignmentId: string, toDay: Day, toIndex: number) => void;
   togglePrepStep: (day: Day, assignmentId: string, index: number) => void;
   togglePantryHave: (id: string) => void;
   addPantryItem: (category: PantryCategory, name: string, have?: boolean) => void;
@@ -211,6 +212,28 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
     [days, saveDays]
   );
 
+  /**
+   * Move (or reorder) a meal. `toIndex` is clamped, so passing something
+   * like `Infinity` is a convenient way to say "drop at the end".
+   */
+  const moveMeal = useCallback(
+    (fromDay: Day, assignmentId: string, toDay: Day, toIndex: number) => {
+      const assignment = days[fromDay].find((a) => a.id === assignmentId);
+      if (!assignment) return;
+
+      const fromList = days[fromDay].filter((a) => a.id !== assignmentId);
+      const toListBase = fromDay === toDay ? fromList : days[toDay];
+      const clampedIndex = Math.max(0, Math.min(toIndex, toListBase.length));
+      const toList = [...toListBase.slice(0, clampedIndex), assignment, ...toListBase.slice(clampedIndex)];
+
+      const next: Days = { ...days };
+      next[fromDay] = fromList;
+      next[toDay] = toList;
+      saveDays(next);
+    },
+    [days, saveDays]
+  );
+
   const togglePrepStep = useCallback(
     (day: Day, assignmentId: string, index: number) => {
       saveDays({
@@ -293,6 +316,7 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
     selectWeek,
     addMeal,
     removeMeal,
+    moveMeal,
     togglePrepStep,
     togglePantryHave,
     addPantryItem,
