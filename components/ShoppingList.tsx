@@ -49,6 +49,13 @@ export function ShoppingList() {
     });
   }
 
+  // Checked-off items sink to the bottom, so what's still needed stays at
+  // the top; each group otherwise keeps the order it was found in.
+  const ordered = useMemo(
+    () => [...needed].sort(([a], [b]) => Number(checkedOff.has(a)) - Number(checkedOff.has(b))),
+    [needed, checkedOff]
+  );
+
   const total = needed.size;
 
   return (
@@ -70,16 +77,17 @@ export function ShoppingList() {
         </Card>
       ) : (
         <Card className="px-4">
-          <div>
-            {[...needed].map(([name, wantedBy]) => (
-              <ChecklistRow
-                key={name}
-                checked={checkedOff.has(name)}
-                onChange={() => toggle(name)}
-                label={name}
-                subText={`for ${wantedBy.join(", ")}`}
-                strike
-              />
+          <div className="columns-1 gap-x-8 sm:columns-2 lg:columns-3">
+            {ordered.map(([name, wantedBy]) => (
+              <div key={name} className="break-inside-avoid">
+                <ChecklistRow
+                  checked={checkedOff.has(name)}
+                  onChange={() => toggle(name)}
+                  label={name}
+                  subText={`for ${wantedBy.join(", ")}`}
+                  strike
+                />
+              </div>
             ))}
           </div>
         </Card>
