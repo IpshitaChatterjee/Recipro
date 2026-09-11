@@ -150,8 +150,8 @@ function MealSlotSection({
       </div>
 
       <SortableContext items={assignments.map((a) => a.id)} strategy={verticalListSortingStrategy}>
-        {/* min-h-52 keeps a section a consistent height — room for ~3 cards even when it has fewer. */}
-        <div className="flex min-h-52 flex-col gap-2">
+        {/* min-h-18 keeps a section a consistent height — room for 1 card even when it's empty. */}
+        <div className="flex min-h-18 flex-col gap-2">
           {assignments.map((assignment) => {
             const recipe = findRecipe(assignment.recipeId);
             return recipe ? (

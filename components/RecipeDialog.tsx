@@ -218,7 +218,7 @@ function RecipeDialogBody({ recipe, onClose }: { recipe: Recipe | null; onClose:
 export function RecipeDialog({ recipe, open, onClose }: Props) {
   return (
     <Sheet open={open} onOpenChange={(next) => !next && onClose()}>
-      <SheetContent side="right" className="flex flex-col data-[side=right]:w-full data-[side=right]:sm:max-w-lg">
+      <SheetContent side="right" className="flex flex-col data-[side=right]:w-full data-[side=right]:sm:max-w-2xl">
         {open && <RecipeDialogBody key={recipe?.id ?? "new"} recipe={recipe ?? null} onClose={onClose} />}
       </SheetContent>
     </Sheet>
