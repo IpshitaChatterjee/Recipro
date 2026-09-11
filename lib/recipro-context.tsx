@@ -22,6 +22,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { mealPlanFromRow, pantryItemFromRow, recipeFromRow, recipeToRow } from "@/lib/supabase/rows";
 import { THIS_WEEK_ID } from "@/lib/dates";
+import { normalizeIngredientName } from "@/lib/ingredient-name";
 import {
   emptyDays,
   newAssignment,
@@ -98,7 +99,10 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
   const findRecipe = useCallback((id: string) => recipes.find((r) => r.id === id), [recipes]);
   const findPantryItemByName = useCallback(
     (name: string) => {
-      const needle = name.trim().toLowerCase();
+      // Accepts either a pantry item's own name or a raw recipe ingredient
+      // name ("Dried chickpeas") — normalizing here matches it to the
+      // pantry's plain grocery-item name ("Chickpeas") either way.
+      const needle = normalizeIngredientName(name).toLowerCase();
       return pantry.find((item) => item.name.trim().toLowerCase() === needle);
     },
     [pantry]
@@ -224,13 +228,13 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
     if (loading) return;
     const pending = pendingIngredientSyncRef.current;
 
-    const used = new Map<string, string>(); // lowercase name -> first-seen original casing
+    const used = new Map<string, string>(); // lowercase normalized name -> its display casing
     for (const recipe of recipes) {
       for (const ingredient of recipe.ingredients) {
-        const trimmed = ingredient.name.trim();
-        if (!trimmed) continue;
-        const key = trimmed.toLowerCase();
-        if (!used.has(key)) used.set(key, trimmed);
+        if (!ingredient.name.trim()) continue;
+        const normalized = normalizeIngredientName(ingredient.name);
+        const key = normalized.toLowerCase();
+        if (!used.has(key)) used.set(key, normalized);
       }
     }
 

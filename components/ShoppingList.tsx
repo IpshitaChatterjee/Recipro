@@ -8,6 +8,7 @@
 import { useMemo } from "react";
 import { PantryCheckbox } from "@/components/PantryCheckbox";
 import { Card } from "@/components/ui/card";
+import { normalizeIngredientName } from "@/lib/ingredient-name";
 import { useRecipro } from "@/lib/recipro-context";
 import { DAYS } from "@/lib/types";
 
@@ -28,8 +29,9 @@ export function ShoppingList() {
           const pantryItem = findPantryItemByName(ingredient.name);
           if (pantryItem?.have) continue;
 
-          if (!needed.has(ingredient.name)) needed.set(ingredient.name, []);
-          const wantedBy = needed.get(ingredient.name)!;
+          const name = normalizeIngredientName(ingredient.name);
+          if (!needed.has(name)) needed.set(name, []);
+          const wantedBy = needed.get(name)!;
           if (!wantedBy.includes(recipe.name)) wantedBy.push(recipe.name);
         }
       }
