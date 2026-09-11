@@ -105,7 +105,13 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
         .maybeSingle();
 
       if (weekId !== selectedWeekIdRef.current) return; // navigated away while loading
-      if (fetchError) return;
+      if (fetchError) {
+        // Bailing here without touching `days` was silent — the board just
+        // kept showing whichever week loaded last, looking exactly like a
+        // stuck/uncleared board. Now at least it's diagnosable.
+        logIfFailed(`load week ${weekId}`)({ error: fetchError });
+        return;
+      }
 
       if (data) {
         const plan = mealPlanFromRow(data);
