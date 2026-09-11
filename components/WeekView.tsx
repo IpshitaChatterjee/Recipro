@@ -42,7 +42,7 @@ function MealCardBody({ recipe }: { recipe: Recipe }) {
     <>
       <div className="font-heading text-sm font-medium text-foreground">{recipe.name}</div>
       <Badge variant="outline" className="w-fit">
-        {recipe.cookTimeMin} min IP
+        {recipe.cookTimeMin} min
       </Badge>
     </>
   );
@@ -124,7 +124,8 @@ function DayColumn({ day, date, isToday, isPast, registerNode }: DayColumnProps)
       </div>
 
       <SortableContext items={assignments.map((a) => a.id)} strategy={verticalListSortingStrategy}>
-        <div className="flex min-h-2 flex-col gap-2">
+        {/* min-h-60 keeps columns a consistent height — room for ~3 cards even when a day has fewer. */}
+        <div className="flex min-h-60 flex-col gap-2">
           {assignments.map((assignment) => {
             const recipe = findRecipe(assignment.recipeId);
             return recipe ? (
@@ -242,7 +243,12 @@ export function WeekView() {
       onDragEnd={handleDragEnd}
       onDragCancel={() => setActiveId(null)}
     >
-      <div className="flex gap-3 overflow-x-auto pb-2">
+      {/*
+        pt-1 matters, not just cosmetic: with only overflow-x set, the CSS
+        overflow spec forces overflow-y to "auto" too, which otherwise clips
+        the top pixel of every card's ring/border against this container.
+      */}
+      <div className="flex gap-3 overflow-x-auto pt-1 pb-2">
         {DAYS.map((day) => (
           <DayColumn
             key={day}
