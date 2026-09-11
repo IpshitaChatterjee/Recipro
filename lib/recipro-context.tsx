@@ -64,6 +64,19 @@ type ReciproContextValue = ReciproState & ReciproActions;
 
 const ReciproContext = createContext<ReciproContextValue | null>(null);
 
+/**
+ * Writes are fire-and-forget so the UI updates instantly from local state —
+ * but that means a failed write (bad RLS policy, missing table, wrong
+ * project) fails *silently*: the screen looks right until the next reload
+ * pulls the database's actual (unchanged) data back down. Logging every
+ * failure here turns that into a visible, diagnosable console error instead.
+ */
+function logIfFailed(action: string) {
+  return ({ error }: { error: { message: string } | null }) => {
+    if (error) console.error(`[Recipro] ${action} failed — this change was NOT saved:`, error.message);
+  };
+}
+
 export function ReciproProvider({ children }: { children: ReactNode }) {
   const supabase = useMemo(() => createClient(), []);
 
@@ -108,7 +121,7 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
       } else {
         const fresh = emptyDays();
         setDays(fresh);
-        await supabase.from("mealplans").insert({ week_id: weekId, days: fresh });
+        await supabase.from("mealplans").insert({ week_id: weekId, days: fresh }).then(logIfFailed("create this week's meal plan"));
       }
     },
     [supabase]
@@ -193,7 +206,11 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
   const saveDays = useCallback(
     (next: Days) => {
       setDays(next);
-      supabase.from("mealplans").update({ days: next }).eq("week_id", selectedWeekIdRef.current);
+      supabase
+        .from("mealplans")
+        .update({ days: next })
+        .eq("week_id", selectedWeekIdRef.current)
+        .then(logIfFailed("save meal plan"));
     },
     [supabase]
   );
@@ -262,7 +279,7 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
       if (!item) return;
       const have = !item.have;
       setPantry((prev) => prev.map((p) => (p.id === id ? { ...p, have } : p)));
-      supabase.from("pantry_items").update({ have }).eq("id", id);
+      supabase.from("pantry_items").update({ have }).eq("id", id).then(logIfFailed("update pantry item"));
     },
     [pantry, supabase]
   );
@@ -281,7 +298,7 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
       const id = `${category === "misc" ? "misc" : "ing"}-${crypto.randomUUID().slice(0, 8)}`;
       const item = { id, name, category, have };
       setPantry((prev) => [...prev, item]);
-      supabase.from("pantry_items").insert(item);
+      supabase.from("pantry_items").insert(item).then(logIfFailed("add pantry item"));
     },
     [findPantryItemByName, supabase, togglePantryHave]
   );
@@ -289,7 +306,7 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
   const deletePantryItem = useCallback(
     (id: string) => {
       setPantry((prev) => prev.filter((item) => item.id !== id));
-      supabase.from("pantry_items").delete().eq("id", id);
+      supabase.from("pantry_items").delete().eq("id", id).then(logIfFailed("delete pantry item"));
     },
     [supabase]
   );
@@ -300,7 +317,10 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
       const recipe: Recipe = { id: recipeId, ...data };
 
       setRecipes((prev) => (id ? prev.map((r) => (r.id === id ? recipe : r)) : [...prev, recipe]));
-      supabase.from("recipes").upsert({ id: recipeId, ...recipeToRow(data) });
+      supabase
+        .from("recipes")
+        .upsert({ id: recipeId, ...recipeToRow(data) })
+        .then(logIfFailed("save recipe"));
     },
     [supabase]
   );
@@ -308,7 +328,7 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
   const deleteRecipe = useCallback(
     (id: string) => {
       setRecipes((prev) => prev.filter((recipe) => recipe.id !== id));
-      supabase.from("recipes").delete().eq("id", id);
+      supabase.from("recipes").delete().eq("id", id).then(logIfFailed("delete recipe"));
     },
     [supabase]
   );
