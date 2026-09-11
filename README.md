@@ -103,9 +103,15 @@ Three tables, defined in `supabase/schema.sql`:
 
 | Table          | Purpose                                              |
 | -------------- | ----------------------------------------------------- |
-| `pantry_items` | Ingredients and household items, and whether in stock |
+| `pantry_items` | Household items (manually managed) and ingredients (auto-synced from recipes — see below), and whether in stock |
 | `recipes`      | Name, cook time, servings, tags, ingredients, prep steps, instructions |
 | `mealplans`    | One row per week (keyed by that week's Monday, e.g. `2026-09-07`), holding the list of recipes assigned to each day (a day can hold any number of meals) and each one's prep checklist |
+
+Pantry ingredients aren't added by hand: a sync effect in
+`recipro-context.tsx` watches `recipes` and keeps exactly one pantry row per
+distinct ingredient name used across all recipes, defaulting new ones to in
+stock. An ingredient no longer used by any recipe is removed. Only household
+items go through the add/remove UI in the Pantry tab.
 
 Recipro has no login — it's a single household's planner, and the browser
 talks to Supabase directly with the public anon key. Row Level Security is

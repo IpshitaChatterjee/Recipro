@@ -203,6 +203,63 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
     [loadWeek]
   );
 
+  // Names with an add/remove currently in flight, so a second effect run
+  // before Realtime echoes the write back (see below) doesn't fire a
+  // duplicate — e.g. editing a recipe's ingredients row by row can re-run
+  // this effect several times before the first write round-trips.
+  const pendingIngredientSyncRef = useRef<Set<string>>(new Set());
+
+  // Keep the pantry's ingredient rows in sync with what the recipes actually
+  // use: every distinct ingredient name across all recipes gets exactly one
+  // pantry row (in stock by default — new ingredients aren't assumed to be
+  // missing), and ingredient rows no longer used by any recipe are removed.
+  // Household/misc items are untouched; those stay manually managed. Skipped
+  // until the initial load finishes so this can't run against an empty
+  // recipes list and wipe out pantry ingredients before they've arrived.
+  //
+  // No optimistic local setPantry here: the pantry_items realtime
+  // subscription (above) already re-fetches and updates state for any
+  // change, including ones this same write makes.
+  useEffect(() => {
+    if (loading) return;
+    const pending = pendingIngredientSyncRef.current;
+
+    const used = new Map<string, string>(); // lowercase name -> first-seen original casing
+    for (const recipe of recipes) {
+      for (const ingredient of recipe.ingredients) {
+        const trimmed = ingredient.name.trim();
+        if (!trimmed) continue;
+        const key = trimmed.toLowerCase();
+        if (!used.has(key)) used.set(key, trimmed);
+      }
+    }
+
+    const existingIngredients = pantry.filter((item) => item.category === "ingredient");
+    const existingNames = new Set(existingIngredients.map((item) => item.name.trim().toLowerCase()));
+
+    for (const [key, name] of used) {
+      if (existingNames.has(key) || pending.has(key)) continue;
+      pending.add(key);
+      supabase
+        .from("pantry_items")
+        .insert({ id: `ing-${crypto.randomUUID().slice(0, 8)}`, name, category: "ingredient", have: true })
+        .then(logIfFailed("add pantry ingredient"))
+        .then(() => pending.delete(key));
+    }
+
+    for (const item of existingIngredients) {
+      const key = item.name.trim().toLowerCase();
+      if (used.has(key) || pending.has(key)) continue;
+      pending.add(key);
+      supabase
+        .from("pantry_items")
+        .delete()
+        .eq("id", item.id)
+        .then(logIfFailed("remove pantry ingredient"))
+        .then(() => pending.delete(key));
+    }
+  }, [recipes, pantry, loading, supabase]);
+
   const saveDays = useCallback(
     (next: Days) => {
       setDays(next);

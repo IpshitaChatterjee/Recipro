@@ -33,6 +33,30 @@ interface Props {
   onClose: () => void;
 }
 
+/**
+ * Instructions are stored as one free-form string, not a step array like
+ * ingredients/prep steps — but a recipe is often still typed as "1. ... 2.
+ * ...". When every non-blank line follows that pattern, split it into steps
+ * so it can get the same numbered-list treatment as Prep ahead; otherwise
+ * leave it as flowing prose.
+ */
+function splitInstructionSteps(text: string): string[] | null {
+  const lines = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length < 2) return null;
+
+  const stepPattern = /^\d+[.)]\s+(.*)$/;
+  const steps: string[] = [];
+  for (const line of lines) {
+    const match = stepPattern.exec(line);
+    if (!match) return null;
+    steps.push(match[1]);
+  }
+  return steps;
+}
+
 function RecipeDetailView({
   recipe,
   onEdit,
@@ -42,6 +66,8 @@ function RecipeDetailView({
   onEdit: () => void;
   onDeleteRequested: () => void;
 }) {
+  const instructionSteps = splitInstructionSteps(recipe.instructions);
+
   return (
     <>
       <SheetHeader>
@@ -93,7 +119,18 @@ function RecipeDetailView({
 
         <div>
           <h3 className="mb-2 font-heading text-sm font-medium text-foreground">Instructions</h3>
-          <p className="text-sm whitespace-pre-wrap text-foreground">{recipe.instructions || "—"}</p>
+          {instructionSteps ? (
+            <ol className="flex flex-col gap-1.5 text-sm text-foreground">
+              {instructionSteps.map((step, i) => (
+                <li key={i} className="flex gap-2">
+                  <span className="text-muted-foreground">{i + 1}.</span>
+                  <span>{step}</span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="text-sm whitespace-pre-wrap text-foreground">{recipe.instructions || "—"}</p>
+          )}
         </div>
 
         <div className="flex items-center justify-between border-t border-border pt-4">
