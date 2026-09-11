@@ -105,7 +105,7 @@ Three tables, defined in `supabase/schema.sql`:
 | -------------- | ----------------------------------------------------- |
 | `pantry_items` | Ingredients and household items, and whether in stock |
 | `recipes`      | Name, cook time, servings, tags, ingredients, prep steps, instructions |
-| `mealplans`    | One row per week (keyed by that week's Monday, e.g. `2026-09-07`), holding which recipe is assigned to each day and its prep checklist |
+| `mealplans`    | One row per week (keyed by that week's Monday, e.g. `2026-09-07`), holding the list of recipes assigned to each day (a day can hold any number of meals) and each one's prep checklist |
 
 Recipro has no login — it's a single household's planner, and the browser
 talks to Supabase directly with the public anon key. Row Level Security is

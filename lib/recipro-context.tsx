@@ -22,7 +22,16 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { mealPlanFromRow, pantryItemFromRow, recipeFromRow, recipeToRow } from "@/lib/supabase/rows";
 import { THIS_WEEK_ID } from "@/lib/dates";
-import { emptyDays, type Day, type Days, type PantryCategory, type Recipe, type RecipeInput } from "@/lib/types";
+import {
+  emptyDays,
+  newAssignment,
+  normalizeDays,
+  type Day,
+  type Days,
+  type PantryCategory,
+  type Recipe,
+  type RecipeInput,
+} from "@/lib/types";
 
 interface ReciproState {
   loading: boolean;
@@ -36,8 +45,9 @@ interface ReciproState {
 
 interface ReciproActions {
   selectWeek: (weekId: string) => void;
-  assignRecipe: (day: Day, recipeId: string | null) => void;
-  togglePrepStep: (day: Day, index: number) => void;
+  addMeal: (day: Day, recipeId: string) => void;
+  removeMeal: (day: Day, assignmentId: string) => void;
+  togglePrepStep: (day: Day, assignmentId: string, index: number) => void;
   togglePantryHave: (id: string) => void;
   addPantryItem: (category: PantryCategory, name: string, have?: boolean) => void;
   deletePantryItem: (id: string) => void;
@@ -50,12 +60,6 @@ interface ReciproActions {
 type ReciproContextValue = ReciproState & ReciproActions;
 
 const ReciproContext = createContext<ReciproContextValue | null>(null);
-
-/** An all-false prep checklist sized to the recipe's current step count. */
-function freshPrepDone(recipes: Recipe[], recipeId: string) {
-  const recipe = recipes.find((r) => r.id === recipeId);
-  return recipe ? recipe.prepSteps.map(() => false) : [];
-}
 
 export function ReciproProvider({ children }: { children: ReactNode }) {
   const supabase = useMemo(() => createClient(), []);
@@ -156,8 +160,8 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
         supabase
           .channel("mealplans-changes")
           .on("postgres_changes", { event: "*", schema: "public", table: "mealplans" }, (payload) => {
-            const row = payload.new as { week_id?: string; days?: Days } | null;
-            if (row?.week_id === selectedWeekIdRef.current && row.days) setDays(row.days);
+            const row = payload.new as { week_id?: string; days?: unknown } | null;
+            if (row?.week_id === selectedWeekIdRef.current && row.days) setDays(normalizeDays(row.days));
           })
           .subscribe()
       );
@@ -183,29 +187,43 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
     [loadWeek]
   );
 
-  const assignRecipe = useCallback(
-    (day: Day, recipeId: string | null) => {
-      const next: Days = {
-        ...days,
-        [day]: recipeId ? { recipeId, prepDone: freshPrepDone(recipes, recipeId) } : null,
-      };
+  const saveDays = useCallback(
+    (next: Days) => {
       setDays(next);
       supabase.from("mealplans").update({ days: next }).eq("week_id", selectedWeekIdRef.current);
     },
-    [days, recipes, supabase]
+    [supabase]
+  );
+
+  const addMeal = useCallback(
+    (day: Day, recipeId: string) => {
+      const recipe = recipes.find((r) => r.id === recipeId);
+      const assignment = newAssignment(recipeId, recipe?.prepSteps.length ?? 0);
+      saveDays({ ...days, [day]: [...days[day], assignment] });
+    },
+    [days, recipes, saveDays]
+  );
+
+  const removeMeal = useCallback(
+    (day: Day, assignmentId: string) => {
+      saveDays({ ...days, [day]: days[day].filter((a) => a.id !== assignmentId) });
+    },
+    [days, saveDays]
   );
 
   const togglePrepStep = useCallback(
-    (day: Day, index: number) => {
-      const assignment = days[day];
-      if (!assignment) return;
-      const prepDone = assignment.prepDone.slice();
-      prepDone[index] = !prepDone[index];
-      const next: Days = { ...days, [day]: { recipeId: assignment.recipeId, prepDone } };
-      setDays(next);
-      supabase.from("mealplans").update({ days: next }).eq("week_id", selectedWeekIdRef.current);
+    (day: Day, assignmentId: string, index: number) => {
+      saveDays({
+        ...days,
+        [day]: days[day].map((assignment) => {
+          if (assignment.id !== assignmentId) return assignment;
+          const prepDone = assignment.prepDone.slice();
+          prepDone[index] = !prepDone[index];
+          return { ...assignment, prepDone };
+        }),
+      });
     },
-    [days, supabase]
+    [days, saveDays]
   );
 
   const togglePantryHave = useCallback(
@@ -273,7 +291,8 @@ export function ReciproProvider({ children }: { children: ReactNode }) {
     recipes,
     pantry,
     selectWeek,
-    assignRecipe,
+    addMeal,
+    removeMeal,
     togglePrepStep,
     togglePantryHave,
     addPantryItem,

@@ -10,13 +10,13 @@ import { DAYS } from "@/lib/types";
 export function PrepList() {
   const { days, findRecipe, togglePrepStep } = useRecipro();
 
-  const blocks = DAYS.flatMap((day) => {
-    const assignment = days[day];
-    if (!assignment) return [];
-    const recipe = findRecipe(assignment.recipeId);
-    if (!recipe || recipe.prepSteps.length === 0) return [];
-    return [{ day, assignment, recipe }];
-  });
+  const blocks = DAYS.flatMap((day) =>
+    days[day].flatMap((assignment) => {
+      const recipe = findRecipe(assignment.recipeId);
+      if (!recipe || recipe.prepSteps.length === 0) return [];
+      return [{ day, assignment, recipe }];
+    })
+  );
 
   return (
     <section>
@@ -31,7 +31,7 @@ export function PrepList() {
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {blocks.map(({ day, assignment, recipe }) => (
-            <Card key={day} className="px-4">
+            <Card key={assignment.id} className="px-4">
               <div className="mb-1 flex items-baseline gap-1.5">
                 <span className="text-sm font-medium text-foreground">{recipe.name}</span>
                 <span className="text-xs text-muted-foreground">— {day}</span>
@@ -41,7 +41,7 @@ export function PrepList() {
                   <PantryCheckbox
                     key={index}
                     checked={Boolean(assignment.prepDone?.[index])}
-                    onChange={() => togglePrepStep(day, index)}
+                    onChange={() => togglePrepStep(day, assignment.id, index)}
                     label={step}
                     strike
                   />

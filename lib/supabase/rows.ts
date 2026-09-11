@@ -4,7 +4,7 @@
  * column rename only touches this file.
  */
 
-import type { Ingredient, MealPlan, PantryItem, Recipe, RecipeInput } from "@/lib/types";
+import { normalizeDays, type Ingredient, type MealPlan, type PantryItem, type Recipe, type RecipeInput } from "@/lib/types";
 
 export interface PantryItemRow {
   id: string;
@@ -55,9 +55,10 @@ export function recipeToRow(data: RecipeInput) {
 
 export interface MealPlanRow {
   week_id: string;
-  days: MealPlan["days"];
+  /** `unknown` because older rows stored `days` in a shape normalizeDays() upgrades. */
+  days: unknown;
 }
 
 export function mealPlanFromRow(row: MealPlanRow): MealPlan {
-  return { weekId: row.week_id, days: row.days };
+  return { weekId: row.week_id, days: normalizeDays(row.days) };
 }

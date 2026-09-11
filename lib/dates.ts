@@ -3,8 +3,8 @@
  * (e.g. "2026-09-07") and doubles as the mealplans table's primary key.
  */
 
-/** How many weeks either side of the current one the picker offers. */
-const WEEK_PICKER_RANGE = 8;
+/** How many weeks after the current one the picker offers. */
+const WEEKS_AHEAD = 3;
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
@@ -40,13 +40,12 @@ export interface WeekOption {
   label: string;
 }
 
-/** Options for the week picker, oldest first, centered on this week. */
+/** Options for the week picker: this week plus the next few — no past weeks. */
 export function buildWeekOptions(): WeekOption[] {
   const options: WeekOption[] = [];
-  for (let offset = -WEEK_PICKER_RANGE; offset <= WEEK_PICKER_RANGE; offset++) {
+  for (let offset = 0; offset <= WEEKS_AHEAD; offset++) {
     const monday = addDays(THIS_MONDAY, offset * 7);
-    const prefix =
-      offset === 0 ? "This week · " : offset === 1 ? "Next week · " : offset === -1 ? "Last week · " : "";
+    const prefix = offset === 0 ? "This week · " : offset === 1 ? "Next week · " : "";
     options.push({ id: weekIdOf(monday), label: prefix + weekRangeLabel(monday) });
   }
   return options;

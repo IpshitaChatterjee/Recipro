@@ -19,19 +19,19 @@ export function ShoppingList() {
     let anyPlanned = false;
 
     for (const day of DAYS) {
-      const assignment = days[day];
-      if (!assignment) continue;
-      const recipe = findRecipe(assignment.recipeId);
-      if (!recipe) continue;
-      anyPlanned = true;
+      for (const assignment of days[day]) {
+        const recipe = findRecipe(assignment.recipeId);
+        if (!recipe) continue;
+        anyPlanned = true;
 
-      for (const ingredient of recipe.ingredients) {
-        const pantryItem = findPantryItemByName(ingredient.name);
-        if (pantryItem?.have) continue;
+        for (const ingredient of recipe.ingredients) {
+          const pantryItem = findPantryItemByName(ingredient.name);
+          if (pantryItem?.have) continue;
 
-        if (!needed.has(ingredient.name)) needed.set(ingredient.name, []);
-        const wantedBy = needed.get(ingredient.name)!;
-        if (!wantedBy.includes(recipe.name)) wantedBy.push(recipe.name);
+          if (!needed.has(ingredient.name)) needed.set(ingredient.name, []);
+          const wantedBy = needed.get(ingredient.name)!;
+          if (!wantedBy.includes(recipe.name)) wantedBy.push(recipe.name);
+        }
       }
     }
 
